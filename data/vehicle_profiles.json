@@ -1,0 +1,153 @@
+{
+  "schema_version": "1.0",
+  "vehicles": [
+    {
+      "make": "Toyota",
+      "model": "Camry",
+      "body_type": "sedan",
+      "drive_type": "fwd",
+      "seats": 5,
+      "typical_price_range": { "min": 9000, "max": 18000 },
+      "traits": [
+        { "name": "reliable", "score": 0.9, "confidence": "high" },
+        { "name": "comfortable", "score": 0.85, "confidence": "high" },
+        { "name": "fuel_efficient", "score": 0.75, "confidence": "medium" },
+        { "name": "common_parts", "score": 0.9, "confidence": "high" }
+      ],
+      "year_ranges": [
+        {
+          "start_year": 2012,
+          "end_year": 2017,
+          "buy_confidence": "high",
+          "known_bad_years": [],
+          "mileage_min": 70000,
+          "mileage_max": 130000,
+          "notes": "Strong commuter value; verify service history on higher-mileage units.",
+          "risk_flags": ["oil_consumption_some_4cyl"]
+        },
+        {
+          "start_year": 2018,
+          "end_year": 2021,
+          "buy_confidence": "medium",
+          "known_bad_years": [],
+          "mileage_min": 40000,
+          "mileage_max": 90000,
+          "notes": "Newer safety tech; expect higher purchase prices than older generations.",
+          "risk_flags": []
+        }
+      ]
+    },
+    {
+      "make": "Toyota",
+      "model": "Corolla",
+      "body_type": "sedan",
+      "drive_type": "fwd",
+      "seats": 5,
+      "typical_price_range": { "min": 6000, "max": 14000 },
+      "traits": [
+        { "name": "reliable", "score": 0.92, "confidence": "high" },
+        { "name": "fuel_efficient", "score": 0.88, "confidence": "high" },
+        { "name": "low_cost", "score": 0.9, "confidence": "high" },
+        { "name": "common_parts", "score": 0.9, "confidence": "high" }
+      ],
+      "year_ranges": [
+        {
+          "start_year": 2014,
+          "end_year": 2019,
+          "buy_confidence": "high",
+          "known_bad_years": [],
+          "mileage_min": 60000,
+          "mileage_max": 120000,
+          "notes": "Excellent budget choice; inexpensive to maintain.",
+          "risk_flags": []
+        }
+      ]
+    },
+    {
+      "make": "Honda",
+      "model": "Civic",
+      "body_type": "sedan",
+      "drive_type": "fwd",
+      "seats": 5,
+      "typical_price_range": { "min": 7000, "max": 16000 },
+      "traits": [
+        { "name": "reliable", "score": 0.88, "confidence": "high" },
+        { "name": "fuel_efficient", "score": 0.85, "confidence": "high" },
+        { "name": "common_parts", "score": 0.85, "confidence": "high" }
+      ],
+      "year_ranges": [
+        {
+          "start_year": 2012,
+          "end_year": 2015,
+          "buy_confidence": "high",
+          "known_bad_years": [],
+          "mileage_min": 70000,
+          "mileage_max": 130000,
+          "notes": "Popular student car; check for accident repairs on cheaper listings.",
+          "risk_flags": []
+        },
+        {
+          "start_year": 2016,
+          "end_year": 2021,
+          "buy_confidence": "medium",
+          "known_bad_years": [2016],
+          "mileage_min": 45000,
+          "mileage_max": 100000,
+          "notes": "Turbo and CVT variants need transmission service records.",
+          "risk_flags": ["cvt_service_history", "turbo_maintenance"]
+        }
+      ]
+    },
+    {
+      "make": "Mazda",
+      "model": "Mazda3",
+      "body_type": "hatchback",
+      "drive_type": "fwd",
+      "seats": 5,
+      "typical_price_range": { "min": 7000, "max": 15000 },
+      "traits": [
+        { "name": "reliable", "score": 0.8, "confidence": "medium" },
+        { "name": "fuel_efficient", "score": 0.8, "confidence": "medium" },
+        { "name": "fun_to_drive", "score": 0.85, "confidence": "high" }
+      ],
+      "year_ranges": [
+        {
+          "start_year": 2014,
+          "end_year": 2018,
+          "buy_confidence": "high",
+          "known_bad_years": [],
+          "mileage_min": 65000,
+          "mileage_max": 120000,
+          "notes": "Good balance of fun and economy; rust-check in salt-belt states.",
+          "risk_flags": ["rust_in_salt_states"]
+        }
+      ]
+    },
+    {
+      "make": "Subaru",
+      "model": "Outback",
+      "body_type": "wagon",
+      "drive_type": "awd",
+      "seats": 5,
+      "typical_price_range": { "min": 11000, "max": 24000 },
+      "traits": [
+        { "name": "awd", "score": 0.95, "confidence": "high" },
+        { "name": "cargo_space", "score": 0.85, "confidence": "high" },
+        { "name": "winter_capable", "score": 0.9, "confidence": "high" },
+        { "name": "reliable", "score": 0.8, "confidence": "medium" }
+      ],
+      "year_ranges": [
+        {
+          "start_year": 2013,
+          "end_year": 2019,
+          "buy_confidence": "high",
+          "known_bad_years": [2013],
+          "mileage_min": 70000,
+          "mileage_max": 130000,
+          "notes": "Standout for snow and outdoor use; confirm head gasket service on 2.5L.",
+          "risk_flags": ["head_gasket_2_5l_era", "higher_purchase_price"]
+        }
+      ]
+    }
+  ]
+}
