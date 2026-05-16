@@ -110,9 +110,11 @@ def test_student_budget_lower_than_outdoor_snow():
     assert student["budget_type"]["max_amount"] < outdoor["budget_type"]["max_amount"]
 
 
-def test_outdoor_snow_prefers_awd_student_avoids_it():
+def test_outdoor_snow_requires_awd_student_does_not_hard_require_drive():
     profiles = load_buyer_profiles()["profiles"]
     student = _profile_by_id(profiles, "student")
     outdoor = _profile_by_id(profiles, "outdoor_snow")
     assert "drive_type:awd" in outdoor["hard_requirements"]
-    assert "drive_type:fwd" in student["hard_requirements"]
+    assert not any(
+        req.startswith("drive_type:") for req in student["hard_requirements"]
+    )

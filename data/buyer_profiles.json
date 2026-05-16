@@ -17,7 +17,7 @@
         "low_cost": 0.25,
         "common_parts": 0.1
       },
-      "hard_requirements": ["drive_type:fwd", "price_under_budget"]
+      "hard_requirements": ["price_under_budget"]
     },
     {
       "id": "outdoor_snow",

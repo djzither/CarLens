@@ -9,14 +9,33 @@ def _models(result: dict) -> list[str]:
     return [item["model"] for item in result["recommendations"]]
 
 
-def test_student_favors_corolla_civic_mazda3_over_outback():
+def _rank_index(models: list[str], model: str) -> int:
+    return models.index(model)
+
+
+def test_student_includes_outback_not_filtered_by_drive_or_body():
     result = recommend("student")
     models = _models(result)
-    assert "Outback" not in models
+    assert "Outback" in models
+    outback_filtered = [
+        item
+        for item in result["filtered_out"]
+        if item["model"] == "Outback"
+    ]
+    assert not outback_filtered
+    for item in outback_filtered:
+        reasons = " ".join(item["exclusion_reasons"]).lower()
+        assert "drive_type" not in reasons
+        assert "preferred_body_types" not in reasons
+
+
+def test_student_economy_cars_rank_above_outback():
+    result = recommend("student")
+    models = _models(result)
+    outback_rank = _rank_index(models, "Outback")
     for model in ("Corolla", "Civic", "Mazda3"):
         assert model in models
-    economy_rank = [models.index(m) for m in ("Corolla", "Civic", "Mazda3")]
-    assert economy_rank == sorted(economy_rank)
+        assert _rank_index(models, model) < outback_rank
 
 
 def test_outdoor_snow_favors_outback_over_corolla():
@@ -51,6 +70,42 @@ def test_over_budget_vehicle_filtered_before_scoring():
     for item in result["recommendations"]:
         price_min = vehicles_by_model[item["model"]]["typical_price_range"]["min"]
         assert price_min <= 12000
+
+
+def test_excluded_body_types_still_hard_filters():
+    buyer = {
+        "budget_type": {"type": "max_purchase", "max_amount": 25000},
+        "excluded_body_types": ["wagon"],
+        "hard_requirements": [],
+    }
+    vehicle = {
+        "make": "Subaru",
+        "model": "Outback",
+        "body_type": "wagon",
+        "drive_type": "awd",
+        "typical_price_range": {"min": 11000, "max": 24000},
+    }
+    passes, reasons = apply_hard_filters(vehicle, buyer)
+    assert passes is False
+    assert any("excluded_body_types" in reason for reason in reasons)
+
+
+def test_preferred_body_types_do_not_hard_filter():
+    buyer = {
+        "budget_type": {"type": "max_purchase", "max_amount": 25000},
+        "preferred_body_types": ["sedan", "hatchback"],
+        "hard_requirements": [],
+    }
+    vehicle = {
+        "make": "Subaru",
+        "model": "Outback",
+        "body_type": "wagon",
+        "drive_type": "awd",
+        "typical_price_range": {"min": 11000, "max": 24000},
+    }
+    passes, reasons = apply_hard_filters(vehicle, buyer)
+    assert passes is True
+    assert reasons == []
 
 
 def test_recommendations_include_positive_reasons():
