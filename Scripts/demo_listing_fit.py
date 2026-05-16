@@ -16,14 +16,47 @@ from src.recommendation.recommendation_engine import recommend
 
 BUYER_PROFILE_ID = "student"
 
-SAMPLE_LISTING = {
-    "make": "Toyota",
-    "model": "Corolla",
-    "year": 2016,
-    "mileage": 85000,
-    "price": 10500,
-    "clean_title": True,
-    "location": "Salt Lake City",
+LISTING_SCENARIOS = {
+    "good_corolla": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 10500,
+        "clean_title": True,
+    },
+    "over_budget_corolla": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 15000,
+        "clean_title": True,
+    },
+    "dirty_title_corolla": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 10500,
+        "clean_title": False,
+    },
+    "bad_year_corolla": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2009,
+        "mileage": 85000,
+        "price": 8000,
+        "clean_title": True,
+    },
+    "wrong_model_bmw": {
+        "make": "BMW",
+        "model": "328i",
+        "year": 2015,
+        "mileage": 90000,
+        "price": 11000,
+        "clean_title": True,
+    },
 }
 
 
@@ -69,14 +102,9 @@ def format_fit_result(fit: dict) -> str:
     return "\n".join(lines)
 
 
-def format_human_output(
-    listing: dict,
-    recommendation: dict,
-    fit: dict,
-) -> str:
+def format_scenario_output(scenario_name: str, listing: dict, fit: dict) -> str:
     lines = [
-        f"Buyer profile: {BUYER_PROFILE_ID}",
-        f"Recommendation: {recommendation['make']} {recommendation['model']}",
+        f"=== {scenario_name} ===",
         format_listing_section(listing),
         format_fit_result(fit),
     ]
@@ -93,8 +121,18 @@ def main() -> int:
         return 1
 
     top_recommendation = result["recommendations"][0]
-    fit = score_listing_fit(SAMPLE_LISTING, top_recommendation, buyer)
-    print(format_human_output(SAMPLE_LISTING, top_recommendation, fit))
+    print(f"Buyer profile: {BUYER_PROFILE_ID}")
+    print(
+        f"Recommendation: {top_recommendation['make']} {top_recommendation['model']}"
+    )
+    print()
+
+    blocks: list[str] = []
+    for scenario_name, listing in LISTING_SCENARIOS.items():
+        fit = score_listing_fit(listing, top_recommendation, buyer)
+        blocks.append(format_scenario_output(scenario_name, listing, fit))
+
+    print("\n".join(blocks))
     return 0
 
 

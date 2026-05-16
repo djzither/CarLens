@@ -113,6 +113,26 @@ def test_dirty_title_gets_warning():
     assert any("clean title" in warning.lower() for warning in result["warnings"])
 
 
+def test_missing_year_range_does_not_lower_fit_score():
+    recommendation = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "selected_year_range": None,
+    }
+    listing = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "price": 11000,
+    }
+    result = score_listing_fit(listing, recommendation, _buyer("student"))
+
+    assert result["fit_label"] == "Strong fit"
+    assert result["fit_score"] >= 0.75
+    assert not any("year" in warning.lower() for warning in result["warnings"])
+    assert not any("year" in reason.lower() for reason in result["reasons"])
+
+
 def test_missing_optional_fields_does_not_crash():
     listing = {
         "make": "Toyota",

@@ -86,7 +86,8 @@ def score_listing_fit(
             f"Model year {normalized['year']} is outside the recommended "
             f"{selected_year_range['start_year']}\u2013{selected_year_range['end_year']} range"
         )
-    max_possible += YEAR_IN_RANGE_POINTS
+    if selected_year_range:
+        max_possible += YEAR_IN_RANGE_POINTS
 
     budget_max = _budget_max(buyer)
     if normalized["price"] <= budget_max:
