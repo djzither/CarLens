@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "profiles": [
+    {
+      "id": "student",
+      "label": "Student",
+      "budget_type": {
+        "type": "max_purchase",
+        "max_amount": 12000
+      },
+      "preferred_body_types": ["sedan", "hatchback"],
+      "max_mileage": 130000,
+      "primary_use": "daily_commute",
+      "trait_weights": {
+        "reliable": 0.35,
+        "fuel_efficient": 0.3,
+        "low_cost": 0.25,
+        "common_parts": 0.1
+      },
+      "hard_requirements": ["drive_type:fwd", "price_under_budget"]
+    },
+    {
+      "id": "outdoor_snow",
+      "label": "Outdoor / Snow",
+      "budget_type": {
+        "type": "max_purchase",
+        "max_amount": 22000
+      },
+      "preferred_body_types": ["wagon", "suv"],
+      "max_mileage": 140000,
+      "primary_use": "snow_and_outdoor",
+      "trait_weights": {
+        "awd": 0.35,
+        "winter_capable": 0.3,
+        "cargo_space": 0.25,
+        "reliable": 0.1
+      },
+      "hard_requirements": ["drive_type:awd"]
+    }
+  ]
+}
