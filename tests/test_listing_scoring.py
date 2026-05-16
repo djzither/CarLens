@@ -1,6 +1,10 @@
 import pytest
 
-from src.listings.listing_fit import score_listing_fit
+from src.listings.listing_fit import (
+    MISSING_MILEAGE_WARNING,
+    MISSING_TITLE_WARNING,
+    score_listing_fit,
+)
 from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.recommendation_engine import recommend
 
@@ -222,7 +226,87 @@ def test_missing_mileage_emits_warning():
     }
     result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
 
-    assert any("mileage was not provided" in warning.lower() for warning in result["warnings"])
+    assert MISSING_MILEAGE_WARNING in result["warnings"]
+
+
+def _clean_corolla_listing(**overrides) -> dict:
+    listing = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 10500,
+        "clean_title": True,
+        "trim": "LE",
+    }
+    listing.update(overrides)
+    return listing
+
+
+def test_missing_mileage_scores_lower_than_clean_mileage():
+    recommendation = _corolla_recommendation()
+    buyer = _buyer("student")
+    disclosed = score_listing_fit(_clean_corolla_listing(), recommendation, buyer)
+    missing_listing = _clean_corolla_listing()
+    del missing_listing["mileage"]
+    missing = score_listing_fit(missing_listing, recommendation, buyer)
+
+    assert missing["fit_score"] < disclosed["fit_score"]
+
+
+def test_missing_mileage_produces_warning():
+    listing = _clean_corolla_listing()
+    del listing["mileage"]
+    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+
+    assert MISSING_MILEAGE_WARNING in result["warnings"]
+
+
+def test_missing_title_produces_warning():
+    listing = _clean_corolla_listing()
+    del listing["clean_title"]
+    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+
+    assert MISSING_TITLE_WARNING in result["warnings"]
+
+
+def test_missing_title_does_not_score_higher_than_dirty_title():
+    recommendation = _corolla_recommendation()
+    buyer = _buyer("student")
+    undisclosed_listing = _clean_corolla_listing()
+    del undisclosed_listing["clean_title"]
+    undisclosed = score_listing_fit(undisclosed_listing, recommendation, buyer)
+    dirty = score_listing_fit(
+        _clean_corolla_listing(clean_title=False),
+        recommendation,
+        buyer,
+    )
+
+    assert undisclosed["fit_score"] <= dirty["fit_score"]
+
+
+def test_extreme_over_budget_is_weak_fit():
+    listing = _clean_corolla_listing(price=25000)
+    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+
+    assert result["fit_label"] == "Weak fit"
+    assert any("exceeds" in warning.lower() for warning in result["warnings"])
+
+
+def test_out_of_range_year_is_not_strong_fit():
+    listing = _clean_corolla_listing(year=2009, price=8000)
+    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+
+    assert result["fit_label"] != "Strong fit"
+    assert any("outside the recommended" in warning for warning in result["warnings"])
+
+
+def test_severely_over_mileage_is_not_strong_fit():
+    listing = _clean_corolla_listing(mileage=200000)
+    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+
+    assert result["fit_label"] != "Strong fit"
+    assert any("exceeds" in warning.lower() for warning in result["warnings"])
 
 
 def test_missing_price_emits_warning():
