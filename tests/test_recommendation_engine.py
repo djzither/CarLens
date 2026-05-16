@@ -168,6 +168,45 @@ def test_recommendations_include_reasons_for_each_vehicle():
         assert any(reason["contribution"] > 0 for reason in positive)
 
 
+def test_score_math_matches_weighted_trait_sum():
+    buyer = _buyer_by_id("student")
+    vehicle = _vehicle_by_model("Corolla")
+    weights = buyer["trait_weights"]
+    traits = {t["name"]: t["score"] for t in vehicle["traits"]}
+
+    expected_score = sum(
+        weights[name] * traits[name] for name in weights if name in traits
+    )
+    expected_max = sum(weights.values())
+
+    result = calculate_score(vehicle, buyer)
+    assert result["score"] == round(expected_score, 4)
+    assert result["max_possible_score"] == round(expected_max, 4)
+    assert result["normalized_score"] == round(expected_score / expected_max, 3)
+
+
+def test_normalized_score_between_zero_and_one():
+    result = recommend("student")
+    for item in result["recommendations"]:
+        assert 0.0 <= item["normalized_score"] <= 1.0
+        assert item["max_possible_score"] > 0
+
+
+def test_recommendations_sorted_by_normalized_score_descending():
+    result = recommend("student")
+    normalized_scores = [item["normalized_score"] for item in result["recommendations"]]
+    assert normalized_scores == sorted(normalized_scores, reverse=True)
+
+
+def test_zero_trait_weights_does_not_crash():
+    buyer = {"trait_weights": {}}
+    vehicle = {"traits": [{"name": "reliable", "score": 0.9, "confidence": "high"}]}
+    result = calculate_score(vehicle, buyer)
+    assert result["score"] == 0.0
+    assert result["max_possible_score"] == 0.0
+    assert result["normalized_score"] == 0.0
+
+
 def test_unknown_buyer_raises():
     with pytest.raises(ValueError, match="buyer profile not found"):
         recommend("nonexistent_buyer")
