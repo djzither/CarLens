@@ -99,6 +99,52 @@ def test_wrong_model_gets_weak_fit():
     assert any("not the recommended" in warning for warning in result["warnings"])
 
 
+def _bmw_listing() -> dict:
+    return {
+        "make": "BMW",
+        "model": "328i",
+        "year": 2015,
+        "mileage": 90000,
+        "price": 11000,
+        "clean_title": True,
+    }
+
+
+def test_wrong_model_bmw_has_weak_fit():
+    result = score_listing_fit(
+        _bmw_listing(), _corolla_recommendation(), _buyer("student")
+    )
+
+    assert result["fit_label"] == "Weak fit"
+    assert any("not the recommended" in warning for warning in result["warnings"])
+
+
+def test_wrong_model_bmw_suppresses_positive_reasons():
+    result = score_listing_fit(
+        _bmw_listing(), _corolla_recommendation(), _buyer("student")
+    )
+
+    reasons_text = " ".join(result["reasons"]).lower()
+    assert "year" not in reasons_text
+    assert "budget" not in reasons_text
+    assert "mileage" not in reasons_text
+
+
+def test_dirty_title_corolla_cannot_be_strong_fit():
+    listing = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 95000,
+        "price": 11000,
+        "clean_title": False,
+    }
+    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+
+    assert result["fit_label"] != "Strong fit"
+    assert result["fit_label"] == "Moderate fit"
+
+
 def test_dirty_title_gets_warning():
     listing = {
         "make": "Toyota",
@@ -111,6 +157,7 @@ def test_dirty_title_gets_warning():
     result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
 
     assert any("clean title" in warning.lower() for warning in result["warnings"])
+    assert any("salvage" in warning.lower() for warning in result["warnings"])
 
 
 def test_missing_year_range_does_not_lower_fit_score():
