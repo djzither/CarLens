@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "buyer_profile_id": "outdoor_snow",
+  "listings": [
+    {
+      "id": "good_awd_outback",
+      "listing": {
+        "make": "Subaru",
+        "model": "Outback",
+        "year": 2016,
+        "mileage": 90000,
+        "price": 19000,
+        "clean_title": true,
+        "drive_type": "awd"
+      }
+    },
+    {
+      "id": "fwd_outback_listing",
+      "listing": {
+        "make": "Subaru",
+        "model": "Outback",
+        "year": 2016,
+        "mileage": 95000,
+        "price": 18500,
+        "clean_title": true,
+        "drive_type": "fwd"
+      }
+    }
+  ]
+}

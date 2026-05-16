@@ -30,9 +30,22 @@ def _buyer(profile_id: str) -> dict[str, Any]:
     raise AssertionError(f"profile not found: {profile_id}")
 
 
+_SPARSE_LISTING_IDS = frozenset({"good_camry", "good_mazda3", "good_outback"})
+
+
 @pytest.fixture
 def ranked_student() -> dict[str, Any]:
     buyer_profile_id, listings = _load_sample_listings()
+    recommendations = recommend(buyer_profile_id)["recommendations"]
+    return rank_listings_by_recommendation(listings, recommendations, _buyer(buyer_profile_id))
+
+
+@pytest.fixture
+def ranked_student_sparse() -> dict[str, Any]:
+    buyer_profile_id, listings = _load_sample_listings()
+    listings = [
+        (name, listing) for name, listing in listings if name not in _SPARSE_LISTING_IDS
+    ]
     recommendations = recommend(buyer_profile_id)["recommendations"]
     return rank_listings_by_recommendation(listings, recommendations, _buyer(buyer_profile_id))
 
@@ -156,20 +169,22 @@ def test_group_order_follows_recommendation_order(ranked_student):
         assert group["recommendation"] == recommendation
 
 
-def test_recommended_vehicle_with_no_matching_listings_appears_in_groups(ranked_student):
-    group = _group_by_model(ranked_student, "Camry")
+def test_recommended_vehicle_with_no_matching_listings_appears_in_groups(
+    ranked_student_sparse,
+):
+    group = _group_by_model(ranked_student_sparse, "Camry")
     assert group is not None
     assert group["make"] == "Toyota"
 
 
-def test_empty_group_has_no_listings(ranked_student):
-    group = _group_by_model(ranked_student, "Camry")
+def test_empty_group_has_no_listings(ranked_student_sparse):
+    group = _group_by_model(ranked_student_sparse, "Camry")
     assert group is not None
     assert group["listings"] == []
 
 
-def test_empty_group_has_coverage_message(ranked_student):
-    group = _group_by_model(ranked_student, "Camry")
+def test_empty_group_has_coverage_message(ranked_student_sparse):
+    group = _group_by_model(ranked_student_sparse, "Camry")
     assert group is not None
     assert group["coverage_message"] == COVERAGE_MESSAGE_NO_LISTINGS
 
@@ -191,7 +206,7 @@ def test_malformed_listing_does_not_crash_ranker():
 
 def test_malformed_listing_appears_in_invalid_listings():
     buyer_profile_id, listings = _load_sample_listings()
-    listings = [("missing_price", {"make": "Toyota", "model": "Corolla", "year": 2016})]
+    listings = [("missing_year", {"make": "Toyota", "model": "Corolla", "price": 10000})]
     recommendations = recommend(buyer_profile_id)["recommendations"]
     ranked = rank_listings_by_recommendation(
         listings, recommendations, _buyer(buyer_profile_id)
@@ -199,5 +214,5 @@ def test_malformed_listing_appears_in_invalid_listings():
 
     assert len(ranked["invalid_listings"]) == 1
     invalid = ranked["invalid_listings"][0]
-    assert invalid["listing_name"] == "missing_price"
+    assert invalid["listing_name"] == "missing_year"
     assert invalid["warnings"]

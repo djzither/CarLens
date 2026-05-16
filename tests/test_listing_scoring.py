@@ -42,6 +42,7 @@ def test_good_corolla_listing_for_student_is_strong_fit():
         "mileage": 95000,
         "price": 11000,
         "clean_title": True,
+        "trim": "LE",
         "location": "Boston, MA",
     }
     result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
@@ -209,3 +210,29 @@ def test_missing_optional_fields_does_not_crash():
     assert "fit_label" in result
     assert isinstance(result["reasons"], list)
     assert isinstance(result["warnings"], list)
+
+
+def test_missing_mileage_emits_warning():
+    listing = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "price": 11000,
+        "clean_title": True,
+    }
+    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+
+    assert any("mileage was not provided" in warning.lower() for warning in result["warnings"])
+
+
+def test_missing_price_emits_warning():
+    listing = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "clean_title": True,
+    }
+    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+
+    assert any("price was not provided" in warning.lower() for warning in result["warnings"])

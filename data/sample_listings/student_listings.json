@@ -10,7 +10,8 @@
         "year": 2016,
         "mileage": 85000,
         "price": 10500,
-        "clean_title": true
+        "clean_title": true,
+        "trim": "LE"
       }
     },
     {
@@ -80,6 +81,60 @@
       }
     },
     {
+      "id": "low_mileage_overpriced_corolla",
+      "listing": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 28000,
+        "price": 14500,
+        "clean_title": true
+      }
+    },
+    {
+      "id": "missing_trim_corolla",
+      "listing": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 10500,
+        "clean_title": true
+      }
+    },
+    {
+      "id": "wrong_trim_corolla",
+      "listing": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 10500,
+        "clean_title": true,
+        "trim": "XSE Sport"
+      }
+    },
+    {
+      "id": "missing_mileage_corolla",
+      "listing": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "price": 10500,
+        "clean_title": true
+      }
+    },
+    {
+      "id": "missing_price_corolla",
+      "listing": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "clean_title": true
+      }
+    },
+    {
       "id": "good_civic",
       "listing": {
         "make": "Honda",
@@ -87,6 +142,61 @@
         "year": 2014,
         "mileage": 90000,
         "price": 11000,
+        "clean_title": true
+      }
+    },
+    {
+      "id": "cheap_dirty_title_civic",
+      "listing": {
+        "make": "Honda",
+        "model": "Civic",
+        "year": 2014,
+        "mileage": 115000,
+        "price": 7500,
+        "clean_title": false
+      }
+    },
+    {
+      "id": "good_camry",
+      "listing": {
+        "make": "Toyota",
+        "model": "Camry",
+        "year": 2015,
+        "mileage": 92000,
+        "price": 11000,
+        "clean_title": true
+      }
+    },
+    {
+      "id": "good_mazda3",
+      "listing": {
+        "make": "Mazda",
+        "model": "Mazda3",
+        "year": 2016,
+        "mileage": 88000,
+        "price": 10500,
+        "clean_title": true
+      }
+    },
+    {
+      "id": "good_year_high_mileage_mazda3",
+      "listing": {
+        "make": "Mazda",
+        "model": "Mazda3",
+        "year": 2016,
+        "mileage": 145000,
+        "price": 9500,
+        "clean_title": true
+      }
+    },
+    {
+      "id": "good_outback",
+      "listing": {
+        "make": "Subaru",
+        "model": "Outback",
+        "year": 2016,
+        "mileage": 95000,
+        "price": 11500,
         "clean_title": true
       }
     },

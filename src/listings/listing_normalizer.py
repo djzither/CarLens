@@ -41,11 +41,12 @@ def normalize_listing(listing: dict[str, Any]) -> dict[str, Any]:
     if not normalized["make"] or not normalized["model"]:
         raise ValueError("listing.make and listing.model are required")
 
-    for field in ("year", "price"):
-        if field not in listing:
-            raise ValueError(f"listing missing fields: ['{field}']")
-        normalized[field] = _coerce_int(listing[field], f"listing.{field}")
+    if "year" not in listing:
+        raise ValueError("listing missing fields: ['year']")
+    normalized["year"] = _coerce_int(listing["year"], "listing.year")
 
+    if "price" in listing and listing["price"] is not None:
+        normalized["price"] = _coerce_int(listing["price"], "listing.price")
     if "mileage" in listing and listing["mileage"] is not None:
         normalized["mileage"] = _coerce_int(listing["mileage"], "listing.mileage")
     if "clean_title" in listing and listing["clean_title"] is not None:
@@ -54,5 +55,13 @@ def normalize_listing(listing: dict[str, Any]) -> dict[str, Any]:
         location = str(listing["location"]).strip()
         if location:
             normalized["location"] = location
+    if "trim" in listing and listing["trim"] is not None:
+        trim = str(listing["trim"]).strip()
+        if trim:
+            normalized["trim"] = trim
+    if "drive_type" in listing and listing["drive_type"] is not None:
+        drive_type = str(listing["drive_type"]).strip()
+        if drive_type:
+            normalized["drive_type"] = drive_type.casefold()
 
     return validate_listing(normalized)

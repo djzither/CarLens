@@ -18,6 +18,23 @@ DIRTY_TITLE_WARNING = (
     "Listing does not have a clean title — this can indicate salvage, flood "
     "damage, major accident history, or theft recovery."
 )
+MISSING_PRICE_WARNING = (
+    "Listing price was not provided — cannot verify budget fit."
+)
+MISSING_MILEAGE_WARNING = (
+    "Listing mileage was not provided — cannot verify mileage limit."
+)
+MISSING_DRIVE_TYPE_WARNING = (
+    "Drive type was not provided — cannot confirm all-wheel drive requirement."
+)
+NOT_AWD_WARNING = (
+    "Listing is not all-wheel drive; your profile requires AWD or 4WD."
+)
+_AWD_DRIVE_TYPES = frozenset({"awd", "4wd"})
+
+_MODEL_TRIMS: dict[tuple[str, str], frozenset[str]] = {
+    ("toyota", "corolla"): frozenset({"l", "le", "se", "xle", "s"}),
+}
 
 
 def fit_label(fit_score: float) -> str:
@@ -35,6 +52,7 @@ def _cap_fit_label(
     model_matches: bool,
     year_in_range: bool,
     has_year_range: bool,
+    awd_requirement_met: bool = True,
 ) -> str:
     if not model_matches:
         return "Weak fit"
@@ -42,6 +60,8 @@ def _cap_fit_label(
         if clean_title is False:
             return "Moderate fit"
         if has_year_range and not year_in_range:
+            return "Moderate fit"
+        if not awd_requirement_met:
             return "Moderate fit"
     return label
 
@@ -70,6 +90,33 @@ def _known_bad_years(selected_year_range: dict[str, Any] | None) -> set[int]:
     if not selected_year_range:
         return set()
     return set(selected_year_range.get("known_bad_years") or [])
+
+
+def _buyer_requires_awd(buyer: dict[str, Any]) -> bool:
+    return "drive_type:awd" in buyer.get("hard_requirements", [])
+
+
+def _append_trim_warnings(
+    normalized: dict[str, Any],
+    recommendation: dict[str, Any],
+    warnings: list[str],
+) -> None:
+    key = (_norm_name(recommendation["make"]), _norm_name(recommendation["model"]))
+    known_trims = _MODEL_TRIMS.get(key)
+    if not known_trims:
+        return
+
+    trim = normalized.get("trim")
+    if not trim:
+        warnings.append(
+            f"Trim not specified for {recommendation['make']} {recommendation['model']}"
+        )
+        return
+
+    if trim.strip().casefold() not in known_trims:
+        warnings.append(
+            f"Trim '{trim}' is not a recognized trim for this model"
+        )
 
 
 def score_listing_fit(
@@ -117,33 +164,52 @@ def score_listing_fit(
         max_possible += YEAR_IN_RANGE_POINTS
 
     budget_max = _budget_max(buyer)
-    if normalized["price"] <= budget_max:
-        score += PRICE_UNDER_BUDGET_POINTS
-        if model_matches:
-            reasons.append(
-                f"Price ${normalized['price']:,} is within your ${budget_max:,} budget"
-            )
-    else:
-        score -= OVER_BUDGET_PENALTY
-        warnings.append(
-            f"Price ${normalized['price']:,} exceeds your ${budget_max:,} budget"
-        )
-    max_possible += PRICE_UNDER_BUDGET_POINTS
-
-    max_mileage = buyer.get("max_mileage")
-    if max_mileage is not None and "mileage" in normalized:
-        max_possible += MILEAGE_OK_POINTS
-        if normalized["mileage"] <= max_mileage:
-            score += MILEAGE_OK_POINTS
+    if "price" in normalized:
+        if normalized["price"] <= budget_max:
+            score += PRICE_UNDER_BUDGET_POINTS
             if model_matches:
                 reasons.append(
-                    f"Mileage {normalized['mileage']:,} is within your "
+                    f"Price ${normalized['price']:,} is within your ${budget_max:,} budget"
+                )
+        else:
+            score -= OVER_BUDGET_PENALTY
+            warnings.append(
+                f"Price ${normalized['price']:,} exceeds your ${budget_max:,} budget"
+            )
+        max_possible += PRICE_UNDER_BUDGET_POINTS
+    else:
+        warnings.append(MISSING_PRICE_WARNING)
+
+    max_mileage = buyer.get("max_mileage")
+    if max_mileage is not None:
+        if "mileage" in normalized:
+            max_possible += MILEAGE_OK_POINTS
+            if normalized["mileage"] <= max_mileage:
+                score += MILEAGE_OK_POINTS
+                if model_matches:
+                    reasons.append(
+                        f"Mileage {normalized['mileage']:,} is within your "
+                        f"{max_mileage:,} mile limit"
+                    )
+            else:
+                warnings.append(
+                    f"Mileage {normalized['mileage']:,} exceeds your "
                     f"{max_mileage:,} mile limit"
                 )
         else:
-            warnings.append(
-                f"Mileage {normalized['mileage']:,} exceeds your {max_mileage:,} mile limit"
-            )
+            warnings.append(MISSING_MILEAGE_WARNING)
+
+    _append_trim_warnings(normalized, recommendation, warnings)
+
+    awd_requirement_met = True
+    if _buyer_requires_awd(buyer) and model_matches:
+        listing_drive = normalized.get("drive_type")
+        if not listing_drive:
+            warnings.append(MISSING_DRIVE_TYPE_WARNING)
+            awd_requirement_met = False
+        elif listing_drive not in _AWD_DRIVE_TYPES:
+            warnings.append(NOT_AWD_WARNING)
+            awd_requirement_met = False
 
     if normalized["year"] in _known_bad_years(selected_year_range):
         score -= BAD_YEAR_PENALTY
@@ -165,6 +231,7 @@ def score_listing_fit(
         model_matches=model_matches,
         year_in_range=year_in_range,
         has_year_range=has_year_range,
+        awd_requirement_met=awd_requirement_met,
     )
 
     return {

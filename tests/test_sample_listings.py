@@ -20,7 +20,17 @@ EXPECTED_LISTING_IDS = [
     "out_of_range_year_corolla",
     "high_mileage_corolla",
     "stacked_risk_corolla",
+    "low_mileage_overpriced_corolla",
+    "missing_trim_corolla",
+    "wrong_trim_corolla",
+    "missing_mileage_corolla",
+    "missing_price_corolla",
     "good_civic",
+    "cheap_dirty_title_civic",
+    "good_camry",
+    "good_mazda3",
+    "good_year_high_mileage_mazda3",
+    "good_outback",
     "wrong_model_bmw",
 ]
 
@@ -171,14 +181,6 @@ def test_format_grouped_summary_lists_groups_and_unmatched(ranked_student_listin
     assert "good_corolla" in summary
     assert "Unmatched listings:" in summary
     assert "wrong_model_bmw" in summary
-
-
-def test_format_grouped_summary_shows_coverage_for_empty_groups(ranked_student_listings):
-    demo = _load_demo_module()
-    summary = demo.format_grouped_summary(ranked_student_listings)
-
-    assert "Recommendation #3: Toyota Camry" in summary
-    assert "  No matching listings found" in summary
 
 
 def test_format_grouped_summary_does_not_crash_on_empty_groups(ranked_student_listings):

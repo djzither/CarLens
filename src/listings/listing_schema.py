@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-LISTING_REQUIRED = frozenset({"make", "model", "year", "price"})
-LISTING_OPTIONAL = frozenset({"mileage", "clean_title", "location"})
+LISTING_REQUIRED = frozenset({"make", "model", "year"})
+LISTING_OPTIONAL = frozenset(
+    {"price", "mileage", "clean_title", "location", "trim", "drive_type"}
+)
 
 
 def _require_dict(data: Any, label: str) -> dict[str, Any]:
@@ -50,14 +52,19 @@ def validate_listing(listing: Any) -> dict[str, Any]:
         "make": _require_str(data["make"], "listing.make"),
         "model": _require_str(data["model"], "listing.model"),
         "year": _require_int(data["year"], "listing.year"),
-        "price": _require_int(data["price"], "listing.price"),
     }
 
+    if "price" in data:
+        validated["price"] = _optional_int(data["price"], "listing.price")
     if "mileage" in data:
         validated["mileage"] = _optional_int(data["mileage"], "listing.mileage")
     if "clean_title" in data:
         validated["clean_title"] = _optional_bool(data["clean_title"], "listing.clean_title")
     if "location" in data:
         validated["location"] = _require_str(data["location"], "listing.location")
+    if "trim" in data:
+        validated["trim"] = _require_str(data["trim"], "listing.trim")
+    if "drive_type" in data:
+        validated["drive_type"] = _require_str(data["drive_type"], "listing.drive_type")
 
     return validated
