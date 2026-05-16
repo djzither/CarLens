@@ -7,9 +7,12 @@ DEMO_SCRIPT = PROJECT_ROOT / "scripts" / "demo_listing_fit.py"
 
 EXPECTED_LISTING_IDS = [
     "good_corolla",
+    "budget_boundary_corolla",
     "over_budget_corolla",
     "dirty_title_corolla",
-    "bad_year_corolla",
+    "out_of_range_year_corolla",
+    "high_mileage_corolla",
+    "stacked_risk_corolla",
     "wrong_model_bmw",
 ]
 

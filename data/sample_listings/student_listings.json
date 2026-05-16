@@ -14,6 +14,17 @@
       }
     },
     {
+      "id": "budget_boundary_corolla",
+      "listing": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 12000,
+        "clean_title": true
+      }
+    },
+    {
       "id": "over_budget_corolla",
       "listing": {
         "make": "Toyota",
@@ -36,7 +47,7 @@
       }
     },
     {
-      "id": "bad_year_corolla",
+      "id": "out_of_range_year_corolla",
       "listing": {
         "make": "Toyota",
         "model": "Corolla",
@@ -44,6 +55,28 @@
         "mileage": 85000,
         "price": 8000,
         "clean_title": true
+      }
+    },
+    {
+      "id": "high_mileage_corolla",
+      "listing": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 140000,
+        "price": 10500,
+        "clean_title": true
+      }
+    },
+    {
+      "id": "stacked_risk_corolla",
+      "listing": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2009,
+        "mileage": 145000,
+        "price": 15000,
+        "clean_title": false
       }
     },
     {
