@@ -1,8 +1,29 @@
 import pytest
 
+from src.profiles.buyer_profile_loader import load_buyer_profiles
+from src.recommendation.explainability import build_reasons
 from src.recommendation.hard_filters import apply_hard_filters
 from src.recommendation.recommendation_engine import recommend
+from src.recommendation.score_calculator import calculate_score
 from src.vehicles import load_vehicle_profiles
+
+
+def _vehicle_by_model(model: str) -> dict:
+    for vehicle in load_vehicle_profiles()["vehicles"]:
+        if vehicle["model"] == model:
+            return vehicle
+    raise AssertionError(f"vehicle not found: {model}")
+
+
+def _buyer_by_id(profile_id: str) -> dict:
+    for profile in load_buyer_profiles()["profiles"]:
+        if profile["id"] == profile_id:
+            return profile
+    raise AssertionError(f"profile not found: {profile_id}")
+
+
+def _positive_reasons(reasons: list[dict]) -> list[dict]:
+    return [reason for reason in reasons if "contribution" in reason]
 
 
 def _models(result: dict) -> list[str]:
@@ -108,12 +129,43 @@ def test_preferred_body_types_do_not_hard_filter():
     assert reasons == []
 
 
-def test_recommendations_include_positive_reasons():
+def test_weak_trait_does_not_say_strong():
+    buyer = {"trait_weights": {"reliable": 0.35}}
+    vehicle = {
+        "traits": [{"name": "reliable", "score": 0.4, "confidence": "medium"}]
+    }
+    reasons = build_reasons(vehicle, buyer)
+    assert len(_positive_reasons(reasons)) == 1
+    assert "Weak" in reasons[0]["message"]
+    assert "Strong" not in reasons[0]["message"]
+
+
+def test_missing_high_weight_trait_appears_in_reasons():
+    reasons = build_reasons(_vehicle_by_model("Outback"), _buyer_by_id("student"))
+    missing = [r for r in reasons if r.get("type") == "missing_trait"]
+    missing_traits = {r["trait"] for r in missing}
+    assert "low_cost" in missing_traits
+    assert "fuel_efficient" in missing_traits
+    assert all(r["weight"] >= 0.20 for r in missing)
+
+
+def test_positive_reasons_include_contribution_values():
+    reasons = build_reasons(_vehicle_by_model("Corolla"), _buyer_by_id("student"))
+    positive = _positive_reasons(reasons)
+    assert positive
+    assert all("contribution" in reason and reason["contribution"] > 0 for reason in positive)
+    contributions = [reason["contribution"] for reason in positive]
+    assert contributions == sorted(contributions, reverse=True)
+
+
+def test_recommendations_include_reasons_for_each_vehicle():
     result = recommend("student")
     assert result["recommendations"]
     for item in result["recommendations"]:
         assert item["reasons"]
-        assert any(reason["contribution"] > 0 for reason in item["reasons"])
+        positive = _positive_reasons(item["reasons"])
+        assert positive
+        assert any(reason["contribution"] > 0 for reason in positive)
 
 
 def test_unknown_buyer_raises():
