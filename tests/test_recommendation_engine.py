@@ -50,9 +50,10 @@ def test_student_includes_outback_not_filtered_by_drive_or_body():
         assert "preferred_body_types" not in reasons
 
 
-def test_student_economy_cars_rank_above_outback():
+def test_student_favors_corolla_civic_mazda3_over_outback():
     result = recommend("student")
     models = _models(result)
+    assert "Outback" in models
     outback_rank = _rank_index(models, "Outback")
     for model in ("Corolla", "Civic", "Mazda3"):
         assert model in models

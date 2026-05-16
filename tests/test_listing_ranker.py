@@ -45,6 +45,21 @@ def _listing_names(group: dict[str, Any]) -> list[str]:
     return [entry["listing_name"] for entry in group["listings"]]
 
 
+def _fit_by_name(ranked: dict[str, Any], listing_name: str) -> dict[str, Any]:
+    for group in ranked["groups"]:
+        for entry in group["listings"]:
+            if entry["listing_name"] == listing_name:
+                return entry["fit"]
+    for entry in ranked["unmatched_listings"]:
+        if entry["listing_name"] == listing_name:
+            return entry["fit"]
+    raise AssertionError(f"listing not found: {listing_name}")
+
+
+def _rank_in_group(group: dict[str, Any], listing_name: str) -> int:
+    return _listing_names(group).index(listing_name) + 1
+
+
 def test_corolla_listing_goes_into_corolla_group(ranked_student):
     group = _group_by_model(ranked_student, "Corolla")
     assert group is not None
@@ -59,6 +74,15 @@ def test_civic_listing_goes_into_civic_group(ranked_student):
     assert "good_civic" in _listing_names(group)
 
 
+def test_civic_listing_scored_against_civic_recommendation(ranked_student):
+    fit = _fit_by_name(ranked_student, "good_civic")
+    reasons_text = " ".join(fit["reasons"])
+
+    assert "Honda Civic" in reasons_text
+    assert "Toyota Corolla" not in reasons_text
+    assert not any("not the recommended" in warning for warning in fit["warnings"])
+
+
 def test_bmw_goes_into_unmatched_listings(ranked_student):
     unmatched_names = [
         entry["listing_name"] for entry in ranked_student["unmatched_listings"]
@@ -66,11 +90,54 @@ def test_bmw_goes_into_unmatched_listings(ranked_student):
     assert "wrong_model_bmw" in unmatched_names
 
 
+def test_unmatched_bmw_has_zero_fit_score(ranked_student):
+    bmw = next(
+        entry
+        for entry in ranked_student["unmatched_listings"]
+        if entry["listing_name"] == "wrong_model_bmw"
+    )
+    assert bmw["fit"]["fit_score"] == 0.0
+
+
+def test_unmatched_bmw_has_no_reasons(ranked_student):
+    bmw = next(
+        entry
+        for entry in ranked_student["unmatched_listings"]
+        if entry["listing_name"] == "wrong_model_bmw"
+    )
+    assert bmw["fit"]["reasons"] == []
+
+
+def test_unmatched_bmw_warning_does_not_match_any_recommended_model(ranked_student):
+    bmw = next(
+        entry
+        for entry in ranked_student["unmatched_listings"]
+        if entry["listing_name"] == "wrong_model_bmw"
+    )
+    assert bmw["fit"]["fit_label"] == "Weak fit"
+    assert any(
+        "does not match any recommended model" in warning
+        for warning in bmw["fit"]["warnings"]
+    )
+    assert any("BMW 328i" in warning for warning in bmw["fit"]["warnings"])
+
+
 def test_listings_inside_group_sorted_by_fit_score_descending(ranked_student):
     group = _group_by_model(ranked_student, "Corolla")
     assert group is not None
     scores = [entry["fit"]["fit_score"] for entry in group["listings"]]
     assert scores == sorted(scores, reverse=True)
+
+
+def test_stacked_risk_corolla_is_weak_fit_and_below_good_corolla(ranked_student):
+    group = _group_by_model(ranked_student, "Corolla")
+    assert group is not None
+    stacked_fit = _fit_by_name(ranked_student, "stacked_risk_corolla")
+
+    assert stacked_fit["fit_label"] == "Weak fit"
+    assert _rank_in_group(group, "stacked_risk_corolla") > _rank_in_group(
+        group, "good_corolla"
+    )
 
 
 def test_group_order_follows_recommendation_order(ranked_student):
@@ -84,11 +151,30 @@ def test_group_order_follows_recommendation_order(ranked_student):
         assert group["model"] == recommendation["model"]
 
 
-def test_unmatched_bmw_is_weak_fit(ranked_student):
-    bmw = next(
-        entry
-        for entry in ranked_student["unmatched_listings"]
-        if entry["listing_name"] == "wrong_model_bmw"
+def test_malformed_listing_does_not_crash_ranker():
+    buyer_profile_id, listings = _load_sample_listings()
+    listings = [
+        *listings,
+        ("missing_fields", {"make": "Toyota", "model": "Corolla"}),
+    ]
+    recommendations = recommend(buyer_profile_id)["recommendations"]
+    ranked = rank_listings_by_recommendation(
+        listings, recommendations, _buyer(buyer_profile_id)
     )
-    assert bmw["fit"]["fit_label"] == "Weak fit"
-    assert any("not the recommended" in warning for warning in bmw["fit"]["warnings"])
+
+    assert ranked["groups"]
+    assert ranked["invalid_listings"]
+
+
+def test_malformed_listing_appears_in_invalid_listings():
+    buyer_profile_id, listings = _load_sample_listings()
+    listings = [("missing_price", {"make": "Toyota", "model": "Corolla", "year": 2016})]
+    recommendations = recommend(buyer_profile_id)["recommendations"]
+    ranked = rank_listings_by_recommendation(
+        listings, recommendations, _buyer(buyer_profile_id)
+    )
+
+    assert len(ranked["invalid_listings"]) == 1
+    invalid = ranked["invalid_listings"][0]
+    assert invalid["listing_name"] == "missing_price"
+    assert invalid["warnings"]

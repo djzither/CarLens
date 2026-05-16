@@ -118,7 +118,12 @@ def test_wrong_model_bmw_is_weak_fit_unmatched(ranked_student_listings):
     )
 
     assert bmw["fit"]["fit_label"] == "Weak fit"
-    assert any("not the recommended" in warning for warning in bmw["fit"]["warnings"])
+    assert bmw["fit"]["fit_score"] == 0.0
+    assert bmw["fit"]["reasons"] == []
+    assert any(
+        "does not match any recommended model" in warning
+        for warning in bmw["fit"]["warnings"]
+    )
 
 
 def test_stacked_risk_corolla_ranks_below_clean_in_budget_corollas(ranked_student_listings):

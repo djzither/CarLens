@@ -106,6 +106,14 @@ def format_grouped_summary(ranked: dict[str, Any]) -> str:
             )
         lines.append("")
 
+    if ranked.get("invalid_listings"):
+        lines.append("Invalid listings:")
+        for entry in ranked["invalid_listings"]:
+            lines.append(f"  {entry['listing_name']}")
+            for warning in entry["warnings"]:
+                lines.append(f"    - {warning}")
+        lines.append("")
+
     return "\n".join(lines).rstrip()
 
 
@@ -132,6 +140,16 @@ def format_grouped_details(ranked: dict[str, Any]) -> str:
                     entry["listing_name"], entry["listing"], entry["fit"]
                 )
             )
+
+    if ranked.get("invalid_listings"):
+        blocks.append("--- Invalid listings ---")
+        for entry in ranked["invalid_listings"]:
+            blocks.append(f"=== {entry['listing_name']} ===")
+            blocks.append(format_listing_section(entry["listing"]))
+            blocks.append("")
+            blocks.append("Warnings")
+            for warning in entry["warnings"]:
+                blocks.append(f"  - {warning}")
 
     return "\n".join(blocks)
 
