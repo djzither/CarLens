@@ -214,6 +214,31 @@ def test_zero_trait_weights_does_not_crash():
     assert result["score"] == 0.0
     assert result["max_possible_score"] == 0.0
     assert result["normalized_score"] == 0.0
+    assert result["matched_weight"] == 0.0
+    assert result["missing_weight"] == 0.0
+
+
+def test_missing_high_weight_traits_report_missing_weight():
+    result = calculate_score(_vehicle_by_model("Outback"), _buyer_by_id("student"))
+    assert result["missing_weight"] > 0.30
+    assert result["matched_weight"] == 0.35
+    assert result["missing_weight"] == round(1.0 - 0.35, 4)
+
+
+def test_no_missing_traits_has_zero_missing_weight():
+    result = calculate_score(_vehicle_by_model("Corolla"), _buyer_by_id("student"))
+    assert result["missing_weight"] == 0.0
+    assert result["matched_weight"] == result["max_possible_score"]
+
+
+def test_recommendations_include_weight_coverage_fields():
+    result = recommend("student")
+    for item in result["recommendations"]:
+        assert "matched_weight" in item
+        assert "missing_weight" in item
+        assert round(item["matched_weight"] + item["missing_weight"], 4) == round(
+            item["max_possible_score"], 4
+        )
 
 
 def test_unknown_buyer_raises():

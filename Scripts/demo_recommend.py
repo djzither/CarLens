@@ -14,6 +14,9 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.recommendation.recommendation_engine import recommend
 
+LIMITED_DATA_MESSAGE = "Limited data available for this vehicle profile"
+MISSING_WEIGHT_NOTICE_THRESHOLD = 0.30
+
 
 def match_label(normalized_score: float) -> str:
     if normalized_score >= 0.75:
@@ -52,6 +55,8 @@ def format_human_output(result: dict, *, debug: bool = False) -> str:
             lines.append(
                 f"     score={item['score']} / max={item['max_possible_score']}"
             )
+        if item.get("missing_weight", 0) > MISSING_WEIGHT_NOTICE_THRESHOLD:
+            lines.append(f"     {LIMITED_DATA_MESSAGE}")
         for year_line in format_year_range_lines(item.get("selected_year_range")):
             lines.append(f"     {year_line}")
         for reason in item.get("reasons", [])[:3]:

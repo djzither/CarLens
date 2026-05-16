@@ -13,9 +13,14 @@ def calculate_score(vehicle: dict[str, Any], buyer: dict[str, Any]) -> dict[str,
     vehicle_traits = _trait_scores_by_name(vehicle)
 
     score = 0.0
+    matched_weight = 0.0
+    missing_weight = 0.0
     for trait_name, weight in trait_weights.items():
         if trait_name in vehicle_traits:
             score += weight * vehicle_traits[trait_name]
+            matched_weight += weight
+        else:
+            missing_weight += weight
 
     max_possible_score = sum(trait_weights.values())
     if max_possible_score == 0:
@@ -27,4 +32,6 @@ def calculate_score(vehicle: dict[str, Any], buyer: dict[str, Any]) -> dict[str,
         "score": round(score, 4),
         "max_possible_score": round(max_possible_score, 4),
         "normalized_score": normalized_score,
+        "matched_weight": round(matched_weight, 4),
+        "missing_weight": round(missing_weight, 4),
     }

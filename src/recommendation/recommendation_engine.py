@@ -45,6 +45,8 @@ def recommend(buyer_profile_id: str) -> dict[str, Any]:
                 "score": scores["score"],
                 "max_possible_score": scores["max_possible_score"],
                 "normalized_score": scores["normalized_score"],
+                "matched_weight": scores["matched_weight"],
+                "missing_weight": scores["missing_weight"],
                 "selected_year_range": select_best_year_range(vehicle, buyer),
                 "reasons": reasons,
             }

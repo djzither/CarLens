@@ -48,6 +48,16 @@ def test_format_human_output_for_student():
     assert "Filtered out:" not in text
 
 
+def test_format_human_output_shows_limited_data_notice():
+    result = recommend("student")
+    outback = next(
+        item for item in result["recommendations"] if item["model"] == "Outback"
+    )
+    assert outback["missing_weight"] > 0.30
+    text = demo.format_human_output(result)
+    assert demo.LIMITED_DATA_MESSAGE in text
+
+
 def test_format_human_output_shows_watch_out_for_bad_years():
     result = {
         "buyer_profile_id": "student",
