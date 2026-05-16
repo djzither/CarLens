@@ -36,12 +36,20 @@ def recommend(buyer_profile_id: str) -> dict[str, Any]:
             filtered_out.append({**entry, "exclusion_reasons": exclusion_reasons})
             continue
 
-        score = calculate_score(vehicle, buyer)
+        scores = calculate_score(vehicle, buyer)
         reasons = build_reasons(vehicle, buyer)
-        recommendations.append({**entry, "score": score, "reasons": reasons})
+        recommendations.append(
+            {
+                **entry,
+                "score": scores["score"],
+                "max_possible_score": scores["max_possible_score"],
+                "normalized_score": scores["normalized_score"],
+                "reasons": reasons,
+            }
+        )
 
     recommendations.sort(
-        key=lambda item: (-item["score"], item["make"], item["model"])
+        key=lambda item: (-item["normalized_score"], item["make"], item["model"])
     )
 
     return {
