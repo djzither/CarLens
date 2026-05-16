@@ -6,6 +6,7 @@ from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.explainability import build_reasons
 from src.recommendation.hard_filters import apply_hard_filters
 from src.recommendation.score_calculator import calculate_score
+from src.recommendation.year_range_selector import select_best_year_range
 from src.vehicles.vehicle_profile_loader import load_vehicle_profiles
 
 
@@ -44,6 +45,7 @@ def recommend(buyer_profile_id: str) -> dict[str, Any]:
                 "score": scores["score"],
                 "max_possible_score": scores["max_possible_score"],
                 "normalized_score": scores["normalized_score"],
+                "selected_year_range": select_best_year_range(vehicle, buyer),
                 "reasons": reasons,
             }
         )

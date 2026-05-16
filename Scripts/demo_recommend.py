@@ -27,6 +27,19 @@ def format_reason(reason: dict) -> str:
     return str(reason.get("message", reason))
 
 
+def format_year_range_lines(selected: dict | None) -> list[str]:
+    if not selected:
+        return []
+    lines = [
+        f"Recommended years: {selected['start_year']}\u2013{selected['end_year']}"
+    ]
+    known_bad_years = selected.get("known_bad_years")
+    if known_bad_years:
+        years = ", ".join(str(year) for year in sorted(known_bad_years))
+        lines.append(f"Watch out for: {years}")
+    return lines
+
+
 def format_human_output(result: dict, *, debug: bool = False) -> str:
     lines = [f"Buyer profile: {result['buyer_profile_id']}", "", "Ranked recommendations:"]
 
@@ -39,6 +52,8 @@ def format_human_output(result: dict, *, debug: bool = False) -> str:
             lines.append(
                 f"     score={item['score']} / max={item['max_possible_score']}"
             )
+        for year_line in format_year_range_lines(item.get("selected_year_range")):
+            lines.append(f"     {year_line}")
         for reason in item.get("reasons", [])[:3]:
             lines.append(f"     - {format_reason(reason)}")
 

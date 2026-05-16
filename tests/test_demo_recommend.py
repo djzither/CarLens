@@ -43,8 +43,34 @@ def test_format_human_output_for_student():
     assert "Buyer profile: student" in text
     assert "Ranked recommendations:" in text
     assert "Corolla" in text
+    assert "Recommended years:" in text
     assert "Strong match" in text or "Moderate match" in text
     assert "Filtered out:" not in text
+
+
+def test_format_human_output_shows_watch_out_for_bad_years():
+    result = {
+        "buyer_profile_id": "student",
+        "recommendations": [
+            {
+                "make": "Honda",
+                "model": "Civic",
+                "normalized_score": 0.648,
+                "score": 0.648,
+                "max_possible_score": 1.0,
+                "reasons": [],
+                "selected_year_range": {
+                    "start_year": 2016,
+                    "end_year": 2021,
+                    "known_bad_years": [2016],
+                },
+            }
+        ],
+        "filtered_out": [],
+    }
+    text = demo.format_human_output(result)
+    assert "Recommended years: 2016\u20132021" in text
+    assert "Watch out for: 2016" in text
 
 
 def test_main_json_flag(capsys):
