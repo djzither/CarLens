@@ -81,6 +81,30 @@ def format_scenario_output(scenario_name: str, listing: dict, fit: dict) -> str:
     return "\n".join(lines)
 
 
+def score_and_rank_listings(
+    scenarios: list[tuple[str, dict[str, Any]]],
+    recommendation: dict[str, Any],
+    buyer: dict[str, Any],
+) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
+    ranked: list[tuple[int, str, dict[str, Any], dict[str, Any]]] = []
+    for index, (scenario_name, listing) in enumerate(scenarios):
+        fit = score_listing_fit(listing, recommendation, buyer)
+        ranked.append((index, scenario_name, listing, fit))
+    ranked.sort(key=lambda item: (-item[3]["fit_score"], item[0]))
+    return [(name, listing, fit) for _, name, listing, fit in ranked]
+
+
+def format_ranked_summary(
+    ranked: list[tuple[str, dict[str, Any], dict[str, Any]]],
+) -> str:
+    lines = ["Ranked listings:", ""]
+    for rank, (scenario_name, _, fit) in enumerate(ranked, start=1):
+        lines.append(
+            f"  {rank}. {scenario_name} — {fit['fit_label']} — {fit['fit_score']:.3f}"
+        )
+    return "\n".join(lines)
+
+
 def main() -> int:
     try:
         buyer_profile_id, scenarios = load_sample_listings()
@@ -103,11 +127,14 @@ def main() -> int:
     )
     print()
 
-    blocks: list[str] = []
-    for scenario_name, listing in scenarios:
-        fit = score_listing_fit(listing, top_recommendation, buyer)
-        blocks.append(format_scenario_output(scenario_name, listing, fit))
+    ranked = score_and_rank_listings(scenarios, top_recommendation, buyer)
+    print(format_ranked_summary(ranked))
+    print()
 
+    blocks = [
+        format_scenario_output(scenario_name, listing, fit)
+        for scenario_name, listing, fit in ranked
+    ]
     print("\n".join(blocks))
     return 0
 
