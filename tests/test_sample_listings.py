@@ -74,6 +74,20 @@ def _corolla_fit(ranked: dict[str, Any], scenario_id: str) -> dict[str, Any]:
     raise AssertionError(f"scenario not in Corolla group: {scenario_id}")
 
 
+def _civic_group(ranked: dict[str, Any]) -> dict[str, Any]:
+    for group in ranked["groups"]:
+        if group["model"] == "Civic":
+            return group
+    raise AssertionError("Civic group not found")
+
+
+def _civic_fit(ranked: dict[str, Any], scenario_id: str) -> dict[str, Any]:
+    for entry in _civic_group(ranked)["listings"]:
+        if entry["listing_name"] == scenario_id:
+            return entry["fit"]
+    raise AssertionError(f"scenario not in Civic group: {scenario_id}")
+
+
 def _corolla_rank(ranked: dict[str, Any], scenario_id: str) -> int:
     return _corolla_listing_names(ranked).index(scenario_id) + 1
 
@@ -111,6 +125,25 @@ def test_stacked_risk_corolla_ranks_below_clean_in_budget_corollas(ranked_studen
     stacked_rank = _corolla_rank(ranked_student_listings, "stacked_risk_corolla")
     for scenario_id in ("good_corolla", "budget_boundary_corolla"):
         assert stacked_rank > _corolla_rank(ranked_student_listings, scenario_id)
+
+
+def test_out_of_range_year_corolla_not_strong_fit_in_ranking(ranked_student_listings):
+    fit = _corolla_fit(ranked_student_listings, "out_of_range_year_corolla")
+
+    assert fit["fit_label"] != "Strong fit"
+    assert fit["fit_label"] == "Moderate fit"
+    assert any("outside the recommended" in warning for warning in fit["warnings"])
+
+
+def test_good_civic_has_no_year_range_warning(ranked_student_listings):
+    fit = _civic_fit(ranked_student_listings, "good_civic")
+
+    assert not any("outside the recommended" in warning for warning in fit["warnings"])
+
+
+def test_good_civic_remains_in_civic_group(ranked_student_listings):
+    civic_names = [entry["listing_name"] for entry in _civic_group(ranked_student_listings)["listings"]]
+    assert "good_civic" in civic_names
 
 
 def test_budget_boundary_corolla_within_budget(ranked_student_listings):

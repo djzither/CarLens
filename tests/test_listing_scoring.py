@@ -130,6 +130,22 @@ def test_wrong_model_bmw_suppresses_positive_reasons():
     assert "mileage" not in reasons_text
 
 
+def test_out_of_range_year_corolla_cannot_be_strong_fit():
+    listing = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2009,
+        "mileage": 85000,
+        "price": 8000,
+        "clean_title": True,
+    }
+    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+
+    assert result["fit_label"] != "Strong fit"
+    assert result["fit_label"] == "Moderate fit"
+    assert any("outside the recommended" in warning for warning in result["warnings"])
+
+
 def test_dirty_title_corolla_cannot_be_strong_fit():
     listing = {
         "make": "Toyota",

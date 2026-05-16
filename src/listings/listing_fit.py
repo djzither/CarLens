@@ -28,11 +28,21 @@ def fit_label(fit_score: float) -> str:
     return "Weak fit"
 
 
-def _cap_fit_label(label: str, *, clean_title: bool | None, model_matches: bool) -> str:
+def _cap_fit_label(
+    label: str,
+    *,
+    clean_title: bool | None,
+    model_matches: bool,
+    year_in_range: bool,
+    has_year_range: bool,
+) -> str:
     if not model_matches:
         return "Weak fit"
-    if clean_title is False and label == "Strong fit":
-        return "Moderate fit"
+    if label == "Strong fit":
+        if clean_title is False:
+            return "Moderate fit"
+        if has_year_range and not year_in_range:
+            return "Moderate fit"
     return label
 
 
@@ -90,18 +100,20 @@ def score_listing_fit(
         score -= WRONG_MODEL_PENALTY
     max_possible += MODEL_MATCH_POINTS
 
-    if _year_in_range(normalized["year"], selected_year_range):
+    year_in_range = _year_in_range(normalized["year"], selected_year_range)
+    has_year_range = selected_year_range is not None
+    if year_in_range:
         score += YEAR_IN_RANGE_POINTS
         if model_matches:
             reasons.append(
                 f"Model year {normalized['year']} is within the recommended range"
             )
-    elif selected_year_range:
+    elif has_year_range:
         warnings.append(
             f"Model year {normalized['year']} is outside the recommended "
             f"{selected_year_range['start_year']}\u2013{selected_year_range['end_year']} range"
         )
-    if selected_year_range:
+    if has_year_range:
         max_possible += YEAR_IN_RANGE_POINTS
 
     budget_max = _budget_max(buyer)
@@ -151,6 +163,8 @@ def score_listing_fit(
         fit_label(normalized_score),
         clean_title=clean_title,
         model_matches=model_matches,
+        year_in_range=year_in_range,
+        has_year_range=has_year_range,
     )
 
     return {
