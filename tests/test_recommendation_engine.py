@@ -129,15 +129,19 @@ def test_preferred_body_types_do_not_hard_filter():
     assert reasons == []
 
 
-def test_weak_trait_does_not_say_strong():
+def test_weak_trait_uses_product_wording_not_raw_scores():
     buyer = {"trait_weights": {"reliable": 0.35}}
     vehicle = {
         "traits": [{"name": "reliable", "score": 0.4, "confidence": "medium"}]
     }
     reasons = build_reasons(vehicle, buyer)
     assert len(_positive_reasons(reasons)) == 1
-    assert "Weak" in reasons[0]["message"]
-    assert "Strong" not in reasons[0]["message"]
+    message = reasons[0]["message"]
+    assert message == "Limited Reliability"
+    assert "score" not in message.lower()
+    assert "weight" not in message.lower()
+    assert reasons[0]["vehicle_score"] == 0.4
+    assert reasons[0]["weight"] == 0.35
 
 
 def test_missing_high_weight_trait_appears_in_reasons():
@@ -147,6 +151,9 @@ def test_missing_high_weight_trait_appears_in_reasons():
     assert "low_cost" in missing_traits
     assert "fuel_efficient" in missing_traits
     assert all(r["weight"] >= 0.20 for r in missing)
+    messages = {r["trait"]: r["message"] for r in missing}
+    assert messages["low_cost"] == "Limited ownership cost data"
+    assert messages["fuel_efficient"] == "Limited fuel efficiency data"
 
 
 def test_positive_reasons_include_contribution_values():
@@ -156,6 +163,8 @@ def test_positive_reasons_include_contribution_values():
     assert all("contribution" in reason and reason["contribution"] > 0 for reason in positive)
     contributions = [reason["contribution"] for reason in positive]
     assert contributions == sorted(contributions, reverse=True)
+    assert positive[0]["message"] == "Excellent Reliability"
+    assert "score" not in positive[0]["message"].lower()
 
 
 def test_recommendations_include_reasons_for_each_vehicle():
