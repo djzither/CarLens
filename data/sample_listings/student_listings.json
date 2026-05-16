@@ -80,6 +80,17 @@
       }
     },
     {
+      "id": "good_civic",
+      "listing": {
+        "make": "Honda",
+        "model": "Civic",
+        "year": 2018,
+        "mileage": 90000,
+        "price": 11000,
+        "clean_title": true
+      }
+    },
+    {
       "id": "wrong_model_bmw",
       "listing": {
         "make": "BMW",

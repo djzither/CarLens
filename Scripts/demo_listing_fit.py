@@ -12,7 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.listings.listing_fit import score_listing_fit
+from src.listings.listing_ranker import rank_listings_by_recommendation
 from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.recommendation_engine import recommend
 
@@ -81,28 +81,59 @@ def format_scenario_output(scenario_name: str, listing: dict, fit: dict) -> str:
     return "\n".join(lines)
 
 
-def score_and_rank_listings(
-    scenarios: list[tuple[str, dict[str, Any]]],
-    recommendation: dict[str, Any],
-    buyer: dict[str, Any],
-) -> list[tuple[str, dict[str, Any], dict[str, Any]]]:
-    ranked: list[tuple[int, str, dict[str, Any], dict[str, Any]]] = []
-    for index, (scenario_name, listing) in enumerate(scenarios):
-        fit = score_listing_fit(listing, recommendation, buyer)
-        ranked.append((index, scenario_name, listing, fit))
-    ranked.sort(key=lambda item: (-item[3]["fit_score"], item[0]))
-    return [(name, listing, fit) for _, name, listing, fit in ranked]
+def format_grouped_summary(ranked: dict[str, Any]) -> str:
+    lines: list[str] = []
 
-
-def format_ranked_summary(
-    ranked: list[tuple[str, dict[str, Any], dict[str, Any]]],
-) -> str:
-    lines = ["Ranked listings:", ""]
-    for rank, (scenario_name, _, fit) in enumerate(ranked, start=1):
+    for group in ranked["groups"]:
         lines.append(
-            f"  {rank}. {scenario_name} — {fit['fit_label']} — {fit['fit_score']:.3f}"
+            f"Recommendation #{group['recommendation_rank']}: "
+            f"{group['make']} {group['model']}"
         )
-    return "\n".join(lines)
+        for rank, entry in enumerate(group["listings"], start=1):
+            fit = entry["fit"]
+            lines.append(
+                f"  {rank}. {entry['listing_name']} — {fit['fit_label']} — "
+                f"{fit['fit_score']:.3f}"
+            )
+        lines.append("")
+
+    if ranked["unmatched_listings"]:
+        lines.append("Unmatched listings:")
+        for entry in ranked["unmatched_listings"]:
+            fit = entry["fit"]
+            lines.append(
+                f"  {entry['listing_name']} — {fit['fit_label']} — {fit['fit_score']:.3f}"
+            )
+        lines.append("")
+
+    return "\n".join(lines).rstrip()
+
+
+def format_grouped_details(ranked: dict[str, Any]) -> str:
+    blocks: list[str] = []
+
+    for group in ranked["groups"]:
+        blocks.append(
+            f"--- {group['make']} {group['model']} "
+            f"(recommendation #{group['recommendation_rank']}) ---"
+        )
+        for entry in group["listings"]:
+            blocks.append(
+                format_scenario_output(
+                    entry["listing_name"], entry["listing"], entry["fit"]
+                )
+            )
+
+    if ranked["unmatched_listings"]:
+        blocks.append("--- Unmatched listings ---")
+        for entry in ranked["unmatched_listings"]:
+            blocks.append(
+                format_scenario_output(
+                    entry["listing_name"], entry["listing"], entry["fit"]
+                )
+            )
+
+    return "\n".join(blocks)
 
 
 def main() -> int:
@@ -116,26 +147,19 @@ def main() -> int:
     buyer = _find_buyer(buyer_data["profiles"], buyer_profile_id)
 
     result = recommend(buyer_profile_id)
-    if not result["recommendations"]:
+    recommendations = result["recommendations"]
+    if not recommendations:
         print("Error: no recommendations available", file=sys.stderr)
         return 1
 
-    top_recommendation = result["recommendations"][0]
     print(f"Buyer profile: {buyer_profile_id}")
-    print(
-        f"Recommendation: {top_recommendation['make']} {top_recommendation['model']}"
-    )
+    print(f"Recommendations loaded: {len(recommendations)}")
     print()
 
-    ranked = score_and_rank_listings(scenarios, top_recommendation, buyer)
-    print(format_ranked_summary(ranked))
+    ranked = rank_listings_by_recommendation(scenarios, recommendations, buyer)
+    print(format_grouped_summary(ranked))
     print()
-
-    blocks = [
-        format_scenario_output(scenario_name, listing, fit)
-        for scenario_name, listing, fit in ranked
-    ]
-    print("\n".join(blocks))
+    print(format_grouped_details(ranked))
     return 0
 
 
