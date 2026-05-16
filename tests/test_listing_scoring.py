@@ -192,6 +192,8 @@ def test_missing_year_range_does_not_lower_fit_score():
         "model": "Corolla",
         "year": 2016,
         "price": 11000,
+        "mileage": 85000,
+        "clean_title": True,
     }
     result = score_listing_fit(listing, recommendation, _buyer("student"))
 
