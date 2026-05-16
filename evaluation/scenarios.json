@@ -1,0 +1,25 @@
+[
+{
+"name":"student_budget",
+"input":{
+"buyer":"student",
+"budget":10000
+},
+"expected_top":[
+"Camry",
+"Corolla",
+"Civic"
+]
+},
+
+{
+"name":"outdoor_snow",
+"input":{
+"buyer":"outdoor_snow",
+"budget":15000
+},
+"expected_top":[
+"Outback", "CR-V", "Ford F-150"
+]
+}
+]
