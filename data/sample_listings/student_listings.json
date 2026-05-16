@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "buyer_profile_id": "student",
+  "listings": [
+    {
+      "id": "good_corolla",
+      "listing": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 10500,
+        "clean_title": true
+      }
+    },
+    {
+      "id": "over_budget_corolla",
+      "listing": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 15000,
+        "clean_title": true
+      }
+    },
+    {
+      "id": "dirty_title_corolla",
+      "listing": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 10500,
+        "clean_title": false
+      }
+    },
+    {
+      "id": "bad_year_corolla",
+      "listing": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2009,
+        "mileage": 85000,
+        "price": 8000,
+        "clean_title": true
+      }
+    },
+    {
+      "id": "wrong_model_bmw",
+      "listing": {
+        "make": "BMW",
+        "model": "328i",
+        "year": 2015,
+        "mileage": 90000,
+        "price": 11000,
+        "clean_title": true
+      }
+    }
+  ]
+}

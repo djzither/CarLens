@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -14,50 +16,18 @@ from src.listings.listing_fit import score_listing_fit
 from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.recommendation_engine import recommend
 
-BUYER_PROFILE_ID = "student"
+SAMPLE_LISTINGS_PATH = PROJECT_ROOT / "data" / "sample_listings" / "student_listings.json"
 
-LISTING_SCENARIOS = {
-    "good_corolla": {
-        "make": "Toyota",
-        "model": "Corolla",
-        "year": 2016,
-        "mileage": 85000,
-        "price": 10500,
-        "clean_title": True,
-    },
-    "over_budget_corolla": {
-        "make": "Toyota",
-        "model": "Corolla",
-        "year": 2016,
-        "mileage": 85000,
-        "price": 15000,
-        "clean_title": True,
-    },
-    "dirty_title_corolla": {
-        "make": "Toyota",
-        "model": "Corolla",
-        "year": 2016,
-        "mileage": 85000,
-        "price": 10500,
-        "clean_title": False,
-    },
-    "bad_year_corolla": {
-        "make": "Toyota",
-        "model": "Corolla",
-        "year": 2009,
-        "mileage": 85000,
-        "price": 8000,
-        "clean_title": True,
-    },
-    "wrong_model_bmw": {
-        "make": "BMW",
-        "model": "328i",
-        "year": 2015,
-        "mileage": 90000,
-        "price": 11000,
-        "clean_title": True,
-    },
-}
+
+def load_sample_listings(path: Path = SAMPLE_LISTINGS_PATH) -> tuple[str, list[tuple[str, dict[str, Any]]]]:
+    with path.open(encoding="utf-8") as handle:
+        data = json.load(handle)
+
+    buyer_profile_id = data["buyer_profile_id"]
+    scenarios: list[tuple[str, dict[str, Any]]] = []
+    for entry in data["listings"]:
+        scenarios.append((entry["id"], entry["listing"]))
+    return buyer_profile_id, scenarios
 
 
 def _find_buyer(profiles: list[dict], buyer_profile_id: str) -> dict:
@@ -112,23 +82,29 @@ def format_scenario_output(scenario_name: str, listing: dict, fit: dict) -> str:
 
 
 def main() -> int:
-    buyer_data = load_buyer_profiles()
-    buyer = _find_buyer(buyer_data["profiles"], BUYER_PROFILE_ID)
+    try:
+        buyer_profile_id, scenarios = load_sample_listings()
+    except (OSError, json.JSONDecodeError, KeyError) as exc:
+        print(f"Error loading sample listings: {exc}", file=sys.stderr)
+        return 1
 
-    result = recommend(BUYER_PROFILE_ID)
+    buyer_data = load_buyer_profiles()
+    buyer = _find_buyer(buyer_data["profiles"], buyer_profile_id)
+
+    result = recommend(buyer_profile_id)
     if not result["recommendations"]:
         print("Error: no recommendations available", file=sys.stderr)
         return 1
 
     top_recommendation = result["recommendations"][0]
-    print(f"Buyer profile: {BUYER_PROFILE_ID}")
+    print(f"Buyer profile: {buyer_profile_id}")
     print(
         f"Recommendation: {top_recommendation['make']} {top_recommendation['model']}"
     )
     print()
 
     blocks: list[str] = []
-    for scenario_name, listing in LISTING_SCENARIOS.items():
+    for scenario_name, listing in scenarios:
         fit = score_listing_fit(listing, top_recommendation, buyer)
         blocks.append(format_scenario_output(scenario_name, listing, fit))
 
