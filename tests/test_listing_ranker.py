@@ -3,7 +3,10 @@ from typing import Any
 
 import pytest
 
-from src.listings.listing_ranker import rank_listings_by_recommendation
+from src.listings.listing_ranker import (
+    COVERAGE_MESSAGE_NO_LISTINGS,
+    rank_listings_by_recommendation,
+)
 from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.recommendation_engine import recommend
 
@@ -145,10 +148,30 @@ def test_group_order_follows_recommendation_order(ranked_student):
     ranks = [group["recommendation_rank"] for group in ranked_student["groups"]]
 
     assert ranks == sorted(ranks)
+    assert len(ranked_student["groups"]) == len(recommendations)
     for group in ranked_student["groups"]:
         recommendation = recommendations[group["recommendation_rank"] - 1]
         assert group["make"] == recommendation["make"]
         assert group["model"] == recommendation["model"]
+        assert group["recommendation"] == recommendation
+
+
+def test_recommended_vehicle_with_no_matching_listings_appears_in_groups(ranked_student):
+    group = _group_by_model(ranked_student, "Camry")
+    assert group is not None
+    assert group["make"] == "Toyota"
+
+
+def test_empty_group_has_no_listings(ranked_student):
+    group = _group_by_model(ranked_student, "Camry")
+    assert group is not None
+    assert group["listings"] == []
+
+
+def test_empty_group_has_coverage_message(ranked_student):
+    group = _group_by_model(ranked_student, "Camry")
+    assert group is not None
+    assert group["coverage_message"] == COVERAGE_MESSAGE_NO_LISTINGS
 
 
 def test_malformed_listing_does_not_crash_ranker():

@@ -171,3 +171,17 @@ def test_format_grouped_summary_lists_groups_and_unmatched(ranked_student_listin
     assert "good_corolla" in summary
     assert "Unmatched listings:" in summary
     assert "wrong_model_bmw" in summary
+
+
+def test_format_grouped_summary_shows_coverage_for_empty_groups(ranked_student_listings):
+    demo = _load_demo_module()
+    summary = demo.format_grouped_summary(ranked_student_listings)
+
+    assert "Recommendation #3: Toyota Camry" in summary
+    assert "  No matching listings found" in summary
+
+
+def test_format_grouped_summary_does_not_crash_on_empty_groups(ranked_student_listings):
+    demo = _load_demo_module()
+    demo.format_grouped_summary(ranked_student_listings)
+    demo.format_grouped_details(ranked_student_listings)

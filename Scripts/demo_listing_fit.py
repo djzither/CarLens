@@ -89,12 +89,15 @@ def format_grouped_summary(ranked: dict[str, Any]) -> str:
             f"Recommendation #{group['recommendation_rank']}: "
             f"{group['make']} {group['model']}"
         )
-        for rank, entry in enumerate(group["listings"], start=1):
-            fit = entry["fit"]
-            lines.append(
-                f"  {rank}. {entry['listing_name']} — {fit['fit_label']} — "
-                f"{fit['fit_score']:.3f}"
-            )
+        if not group["listings"]:
+            lines.append(f"  {group.get('coverage_message', 'No matching listings found')}")
+        else:
+            for rank, entry in enumerate(group["listings"], start=1):
+                fit = entry["fit"]
+                lines.append(
+                    f"  {rank}. {entry['listing_name']} — {fit['fit_label']} — "
+                    f"{fit['fit_score']:.3f}"
+                )
         lines.append("")
 
     if ranked["unmatched_listings"]:
@@ -125,12 +128,15 @@ def format_grouped_details(ranked: dict[str, Any]) -> str:
             f"--- {group['make']} {group['model']} "
             f"(recommendation #{group['recommendation_rank']}) ---"
         )
-        for entry in group["listings"]:
-            blocks.append(
-                format_scenario_output(
-                    entry["listing_name"], entry["listing"], entry["fit"]
+        if not group["listings"]:
+            blocks.append(group.get("coverage_message", "No matching listings found"))
+        else:
+            for entry in group["listings"]:
+                blocks.append(
+                    format_scenario_output(
+                        entry["listing_name"], entry["listing"], entry["fit"]
+                    )
                 )
-            )
 
     if ranked["unmatched_listings"]:
         blocks.append("--- Unmatched listings ---")

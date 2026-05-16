@@ -5,6 +5,8 @@ from typing import Any
 from src.listings.listing_fit import score_listing_fit
 from src.listings.listing_normalizer import normalize_listing
 
+COVERAGE_MESSAGE_NO_LISTINGS = "No matching listings found"
+
 
 def _model_key(make: str, model: str) -> tuple[str, str]:
     return make.strip().casefold(), model.strip().casefold()
@@ -87,24 +89,24 @@ def rank_listings_by_recommendation(
     groups: list[dict[str, Any]] = []
     for recommendation_rank, recommendation in enumerate(recommendations, start=1):
         key = _model_key(recommendation["make"], recommendation["model"])
-        bucket = buckets.get(key)
-        if not bucket:
-            continue
+        bucket = buckets.get(key, [])
 
         scored: list[tuple[int, str, dict[str, Any], dict[str, Any]]] = []
         for index, listing_name, listing in bucket:
             fit = score_listing_fit(listing, recommendation, buyer)
             scored.append((index, listing_name, listing, fit))
 
-        groups.append(
-            {
-                "recommendation_rank": recommendation_rank,
-                "make": recommendation["make"],
-                "model": recommendation["model"],
-                "recommendation_score": recommendation["normalized_score"],
-                "listings": _sort_scored_listings(scored),
-            }
-        )
+        group: dict[str, Any] = {
+            "recommendation_rank": recommendation_rank,
+            "make": recommendation["make"],
+            "model": recommendation["model"],
+            "recommendation": recommendation,
+            "recommendation_score": recommendation["normalized_score"],
+            "listings": _sort_scored_listings(scored),
+        }
+        if not group["listings"]:
+            group["coverage_message"] = COVERAGE_MESSAGE_NO_LISTINGS
+        groups.append(group)
 
     unmatched_listings = [
         {
