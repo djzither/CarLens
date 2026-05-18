@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -8,6 +9,7 @@ from src.listings.listing_normalizer import normalize_listing
 from src.listings.listing_ranker import (
     COVERAGE_MESSAGE_NO_LISTINGS,
     rank_listings_by_recommendation,
+    rank_listings_for_recommendations,
 )
 from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.recommendation_engine import recommend
@@ -509,7 +511,7 @@ def test_ranker_dedupes_duplicate_listing_urls():
         "price": "$10,500",
         "listing_url": duplicate_url,
     }
-    ranked = rank_listings_by_recommendation(
+    ranked = rank_listings_for_recommendations(
         [
             ("sparse_corolla", sparse),
             ("complete_corolla", complete),
@@ -523,6 +525,120 @@ def test_ranker_dedupes_duplicate_listing_urls():
     assert len(group["listings"]) == 1
     assert group["listings"][0]["listing_name"] == "complete_corolla"
     assert group["listings"][0]["listing"]["price"] == 10500
+
+
+def test_duplicate_raw_listings_appear_once_in_ranked_output():
+    duplicate_url = "https://example.com/listing/dup-once"
+    first = {
+        "title": "2016 Toyota Corolla LE 92k miles",
+        "listing_url": duplicate_url,
+        "source": "craigslist",
+        "listing_id": "dup-1",
+    }
+    second = {
+        "title": "2016 Toyota Corolla LE clean title 92k miles",
+        "price": "$10,500",
+        "listing_url": duplicate_url,
+        "source": "craigslist",
+        "listing_id": "dup-1",
+    }
+    ranked = rank_listings_for_recommendations(
+        [("first", first), ("second", second)],
+        [_corolla_recommendation()],
+        _buyer("student"),
+    )
+
+    group = _group_by_model(ranked, "Corolla")
+    assert group is not None
+    assert len(group["listings"]) == 1
+    assert ranked["pipeline"]["raw_count"] == 2
+    assert ranked["pipeline"]["deduped_count"] == 1
+
+
+def test_duplicate_keeps_most_complete_version_in_ranked_output():
+    duplicate_url = "https://example.com/listing/complete-wins"
+    sparse = {
+        "title": "2016 Toyota Corolla LE 92k miles",
+        "listing_url": duplicate_url,
+    }
+    complete = {
+        "title": "2016 Toyota Corolla LE clean title 92k miles",
+        "price": "$10,500",
+        "clean_title": True,
+        "listing_url": duplicate_url,
+    }
+    ranked = rank_listings_for_recommendations(
+        [("sparse", sparse), ("complete", complete)],
+        [_corolla_recommendation()],
+        _buyer("student"),
+    )
+
+    listing = _group_by_model(ranked, "Corolla")["listings"][0]["listing"]
+    assert listing["price"] == 10500
+    assert listing["clean_title"] is True
+    assert listing["mileage"] == 92000
+
+
+@patch("src.listings.listing_ranker.score_listing_fit", wraps=score_listing_fit)
+def test_dedupe_happens_before_ranking(mock_score_listing_fit):
+    duplicate_url = "https://example.com/listing/score-once"
+    sparse = {
+        "title": "2016 Toyota Corolla LE 92k miles",
+        "listing_url": duplicate_url,
+    }
+    complete = {
+        "title": "2016 Toyota Corolla LE clean title 92k miles",
+        "price": "$10,500",
+        "listing_url": duplicate_url,
+    }
+    rank_listings_for_recommendations(
+        [("sparse", sparse), ("complete", complete)],
+        [_corolla_recommendation()],
+        _buyer("student"),
+    )
+
+    assert mock_score_listing_fit.call_count == 1
+
+
+def test_structured_reasons_after_normalization_and_dedupe():
+    duplicate_url = "https://example.com/listing/reasons"
+    sparse = {
+        "title": "2016 Toyota Corolla LE 92k miles",
+        "listing_url": duplicate_url,
+    }
+    complete = {
+        "title": "2016 Toyota Corolla LE clean title 92k miles",
+        "price": "$10,500",
+        "listing_url": duplicate_url,
+    }
+    ranked = rank_listings_for_recommendations(
+        [("sparse", sparse), ("complete", complete)],
+        [_corolla_recommendation()],
+        _buyer("student"),
+    )
+
+    fit = _group_by_model(ranked, "Corolla")["listings"][0]["fit"]
+    assert "Strong model match" in fit["positive_reasons"]
+    assert "Under budget" in fit["positive_reasons"]
+    assert fit["negative_reasons"] == []
+    assert any("Toyota Corolla" in reason for reason in fit["reasons"])
+
+
+def test_marketplace_metadata_preserved_in_ranked_output():
+    raw = {
+        "title": "2016 Toyota Corolla LE clean title 92k miles",
+        "price": "$10,500",
+        "source": "craigslist",
+        "listing_id": "cl-12345",
+        "listing_url": "https://example.com/listing/cl-12345",
+    }
+
+    _, listing, _ = _rank_single_raw(raw, listing_name="marketplace_corolla")
+
+    assert listing["source"] == "craigslist"
+    assert listing["listing_id"] == "cl-12345"
+    assert listing["listing_url"] == "https://example.com/listing/cl-12345"
+    assert listing["raw_title"] == raw["title"]
 
 
 def test_canonical_listing_preserved_in_ranked_output():
