@@ -3,7 +3,8 @@ from typing import Any
 
 import pytest
 
-from src.listings.listing_fit import score_listing_fit
+from src.listings.listing_fit import DIRTY_TITLE_WARNING, score_listing_fit
+from src.listings.listing_normalizer import normalize_listing
 from src.listings.listing_ranker import (
     COVERAGE_MESSAGE_NO_LISTINGS,
     rank_listings_by_recommendation,
@@ -408,3 +409,107 @@ def test_malformed_listing_appears_in_invalid_listings():
     invalid = ranked["invalid_listings"][0]
     assert invalid["listing_name"] == "missing_year"
     assert invalid["warnings"]
+
+
+def _rank_single_raw(
+    raw_listing: dict[str, Any],
+    *,
+    listing_name: str = "raw_marketplace",
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    ranked = rank_listings_by_recommendation(
+        [(listing_name, raw_listing)],
+        [_corolla_recommendation()],
+        _buyer("student"),
+    )
+    group = _group_by_model(ranked, "Corolla")
+    assert group is not None
+    assert len(group["listings"]) == 1
+    entry = group["listings"][0]
+    return ranked, entry["listing"], entry["fit"]
+
+
+def test_raw_title_listing_ranks_under_corolla_group():
+    raw = {
+        "title": "2016 Toyota Corolla LE clean title 92k miles",
+        "price": "$10,500",
+    }
+
+    ranked, listing, fit = _rank_single_raw(raw, listing_name="raw_corolla_title")
+
+    assert ranked["invalid_listings"] == []
+    assert listing["make"] == "Toyota"
+    assert listing["model"] == "Corolla"
+    assert listing["year"] == 2016
+    assert listing["trim"] == "LE"
+    assert "Toyota Corolla" in " ".join(fit["reasons"])
+
+
+def test_raw_price_string_scores_as_under_budget():
+    raw = {
+        "title": "2016 Toyota Corolla LE clean title 92k miles",
+        "price": "$10,500",
+    }
+
+    _, _, fit = _rank_single_raw(raw)
+
+    assert "Under budget" in fit["positive_reasons"]
+    assert any("within your" in reason.lower() for reason in fit["reasons"])
+
+
+def test_raw_mileage_string_scores_as_mileage_ok():
+    raw = {
+        "title": "2016 Toyota Corolla LE clean title 92k miles",
+        "price": "$10,500",
+    }
+
+    _, listing, fit = _rank_single_raw(raw)
+
+    assert listing["mileage"] == 92000
+    assert "Mileage within preferred range" in fit["positive_reasons"]
+    assert any("within your" in reason.lower() and "mile" in reason.lower() for reason in fit["reasons"])
+
+
+def test_raw_dirty_title_listing_negative_reason_and_warning():
+    raw = {
+        "title": "2016 Toyota Corolla LE 92k miles",
+        "price": "$10,500",
+        "description": "salvage title, runs and drives",
+    }
+
+    _, listing, fit = _rank_single_raw(raw, listing_name="raw_dirty_corolla")
+
+    assert listing["clean_title"] is False
+    assert "Dirty title" in fit["negative_reasons"]
+    assert any(DIRTY_TITLE_WARNING in warning for warning in fit["warnings"])
+
+
+def test_raw_listing_missing_optional_fields_does_not_crash_ranker():
+    raw = {"title": "2016 Toyota Corolla LE"}
+
+    ranked, listing, fit = _rank_single_raw(raw, listing_name="raw_minimal_corolla")
+
+    assert ranked["invalid_listings"] == []
+    assert listing["make"] == "Toyota"
+    assert listing["model"] == "Corolla"
+    assert listing["year"] == 2016
+    assert "price" not in listing
+    assert "mileage" not in listing
+    assert any("price was not provided" in warning.lower() for warning in fit["warnings"])
+    assert any("mileage not disclosed" in warning.lower() for warning in fit["warnings"])
+
+
+def test_canonical_listing_preserved_in_ranked_output():
+    structured = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 10500,
+        "clean_title": True,
+        "trim": "LE",
+    }
+    expected = normalize_listing(structured)
+
+    _, listing, _ = _rank_single_raw(structured, listing_name="canonical_corolla")
+
+    assert listing == expected

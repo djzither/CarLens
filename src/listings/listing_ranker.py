@@ -20,20 +20,19 @@ def _model_key(make: str, model: str) -> tuple[str, str]:
     return make.strip().casefold(), model.strip().casefold()
 
 
+def _prepare_listing(listing: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a raw or canonical listing once for grouping and scoring."""
+    return normalize_listing(listing)
+
+
 def _listing_model_key(listing: dict[str, Any]) -> tuple[str, str]:
-    normalized = normalize_listing(listing)
-    return _model_key(normalized["make"], normalized["model"])
-
-
-def _listing_display_name(listing: dict[str, Any]) -> tuple[str, str]:
-    make = str(listing.get("make", "Unknown")).strip() or "Unknown"
-    model = str(listing.get("model", "Unknown")).strip() or "Unknown"
-    return make, model
+    return _model_key(listing["make"], listing["model"])
 
 
 def _unmatched_fit(listing: dict[str, Any]) -> dict[str, Any]:
-    make, model = _listing_display_name(listing)
-    unmatched_warning = f"{make} {model} does not match any recommended model"
+    unmatched_warning = (
+        f"{listing['make']} {listing['model']} does not match any recommended model"
+    )
     return {
         "fit_score": 0.0,
         "fit_label": "Weak fit",
@@ -111,19 +110,20 @@ def rank_listings_by_recommendation(
     unmatched_entries: list[tuple[int, str, dict[str, Any]]] = []
     invalid_listings: list[dict[str, Any]] = []
 
-    for index, (listing_name, listing) in enumerate(listings):
+    for index, (listing_name, raw_listing) in enumerate(listings):
         try:
-            key = _listing_model_key(listing)
+            listing = _prepare_listing(raw_listing)
         except ValueError as exc:
             invalid_listings.append(
                 {
                     "listing_name": listing_name,
-                    "listing": listing,
+                    "listing": raw_listing,
                     "warnings": [str(exc)],
                 }
             )
             continue
 
+        key = _listing_model_key(listing)
         if key in lookup:
             buckets.setdefault(key, []).append((index, listing_name, listing))
         else:
