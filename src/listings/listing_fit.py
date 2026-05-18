@@ -11,7 +11,7 @@ MILEAGE_OK_POINTS = 15
 
 WRONG_MODEL_PENALTY = 45
 OVER_BUDGET_PENALTY = 20
-EXTREME_OVER_BUDGET_MULTIPLIER = 2
+SEVERE_OVER_BUDGET_MULTIPLIER = 2
 BAD_YEAR_PENALTY = 25
 DIRTY_TITLE_PENALTY = 20
 UNDISCLOSED_TITLE_PENALTY = 20
@@ -59,13 +59,13 @@ def _cap_fit_label(
     year_in_range: bool,
     has_year_range: bool,
     awd_requirement_met: bool = True,
-    extreme_over_budget: bool = False,
+    severe_over_budget: bool = False,
     over_mileage_limit: bool = False,
     severe_over_mileage: bool = False,
 ) -> str:
     if not model_matches:
         return "Weak fit"
-    if extreme_over_budget:
+    if severe_over_budget:
         return "Weak fit"
     if label == "Strong fit":
         if clean_title is not True:
@@ -186,7 +186,7 @@ def score_listing_fit(
         max_possible += YEAR_IN_RANGE_POINTS
 
     budget_max = _budget_max(buyer)
-    extreme_over_budget = False
+    severe_over_budget = False
     if "price" in normalized:
         if normalized["price"] <= budget_max:
             score += PRICE_UNDER_BUDGET_POINTS
@@ -199,8 +199,8 @@ def score_listing_fit(
             warnings.append(
                 f"Price ${normalized['price']:,} exceeds your ${budget_max:,} budget"
             )
-            if normalized["price"] >= budget_max * EXTREME_OVER_BUDGET_MULTIPLIER:
-                extreme_over_budget = True
+            if normalized["price"] >= budget_max * SEVERE_OVER_BUDGET_MULTIPLIER:
+                severe_over_budget = True
         max_possible += PRICE_UNDER_BUDGET_POINTS
     else:
         warnings.append(MISSING_PRICE_WARNING)
@@ -270,7 +270,7 @@ def score_listing_fit(
         year_in_range=year_in_range,
         has_year_range=has_year_range,
         awd_requirement_met=awd_requirement_met,
-        extreme_over_budget=extreme_over_budget,
+        severe_over_budget=severe_over_budget,
         over_mileage_limit=over_mileage_limit,
         severe_over_mileage=severe_over_mileage,
     )

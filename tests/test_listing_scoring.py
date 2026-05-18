@@ -294,7 +294,7 @@ def test_missing_title_does_not_score_higher_than_dirty_title():
     assert undisclosed["fit_score"] <= dirty["fit_score"]
 
 
-def test_extreme_over_budget_is_weak_fit():
+def test_severely_over_budget_is_weak_fit():
     listing = _clean_corolla_listing(price=25000)
     result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
 
