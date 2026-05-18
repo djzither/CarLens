@@ -156,10 +156,10 @@ def test_wrong_trim_corolla_gets_trim_warning(ranked_student):
     assert any("not a recognized trim" in warning for warning in fit["warnings"])
 
 
-def test_missing_trim_corolla_gets_trim_warning(ranked_student):
+def test_missing_trim_corolla_does_not_get_trim_specified_warning(ranked_student):
     fit = _fit_in_group(ranked_student, "Corolla", "missing_trim_corolla")
 
-    assert any("Trim not specified" in warning for warning in fit["warnings"])
+    assert not any("Trim not specified" in warning for warning in fit["warnings"])
 
 
 def test_good_listing_for_each_top_recommended_model(ranked_student):

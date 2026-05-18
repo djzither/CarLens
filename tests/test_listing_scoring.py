@@ -24,17 +24,32 @@ def _corolla_recommendation() -> dict:
     )
 
 
-def _civic_recommendation_with_bad_years() -> dict:
-    result = recommend("student")
-    civic = next(
-        item for item in result["recommendations"] if item["model"] == "Civic"
+def _civic_recommendation() -> dict:
+    return next(
+        item
+        for item in recommend("student")["recommendations"]
+        if item["model"] == "Civic"
     )
+
+
+def _civic_recommendation_with_bad_years() -> dict:
     return {
-        **civic,
+        **_civic_recommendation(),
         "selected_year_range": {
             "start_year": 2016,
             "end_year": 2021,
             "known_bad_years": [2016],
+        },
+    }
+
+
+def _civic_recommendation_2012_2015_range() -> dict:
+    return {
+        **_civic_recommendation(),
+        "selected_year_range": {
+            "start_year": 2012,
+            "end_year": 2015,
+            "known_bad_years": [],
         },
     }
 
@@ -87,6 +102,25 @@ def test_known_bad_year_gets_warning():
     )
 
     assert any("known weak year" in warning.lower() for warning in result["warnings"])
+
+
+def test_known_bad_year_uses_vehicle_profile_not_only_selected_range():
+    listing = {
+        "make": "Honda",
+        "model": "Civic",
+        "year": 2016,
+        "mileage": 80000,
+        "price": 10000,
+        "clean_title": True,
+    }
+    result = score_listing_fit(
+        listing, _civic_recommendation_2012_2015_range(), _buyer("student")
+    )
+
+    assert any("known weak year" in warning.lower() for warning in result["warnings"])
+    assert any(
+        "outside the recommended" in warning for warning in result["warnings"]
+    )
 
 
 def test_wrong_model_gets_weak_fit():
@@ -363,3 +397,24 @@ def test_missing_price_is_not_strong_fit():
     assert any(
         "price was not provided" in warning.lower() for warning in result["warnings"]
     )
+
+
+def test_absent_trim_does_not_emit_trim_not_specified_warning():
+    listing = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 10500,
+        "clean_title": True,
+    }
+    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+
+    assert not any("Trim not specified" in warning for warning in result["warnings"])
+
+
+def test_unrecognized_trim_still_emits_warning():
+    listing = _clean_corolla_listing(trim="XSE Sport")
+    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+
+    assert any("not a recognized trim" in warning for warning in result["warnings"])

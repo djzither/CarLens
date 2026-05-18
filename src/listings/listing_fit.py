@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.listings.listing_normalizer import normalize_listing
+from src.vehicles.vehicle_profile_loader import load_vehicle_profiles
 
 MODEL_MATCH_POINTS = 40
 YEAR_IN_RANGE_POINTS = 25
@@ -104,10 +105,18 @@ def _year_in_range(year: int, selected_year_range: dict[str, Any] | None) -> boo
     return selected_year_range["start_year"] <= year <= selected_year_range["end_year"]
 
 
-def _known_bad_years(selected_year_range: dict[str, Any] | None) -> set[int]:
-    if not selected_year_range:
-        return set()
-    return set(selected_year_range.get("known_bad_years") or [])
+def _known_bad_years_for_recommendation(recommendation: dict[str, Any]) -> set[int]:
+    """Union known_bad_years from all vehicle profile ranges for this model."""
+    make = _norm_name(recommendation["make"])
+    model = _norm_name(recommendation["model"])
+    bad_years: set[int] = set()
+    for vehicle in load_vehicle_profiles()["vehicles"]:
+        if _norm_name(vehicle["make"]) != make or _norm_name(vehicle["model"]) != model:
+            continue
+        for year_range in vehicle.get("year_ranges") or []:
+            bad_years.update(year_range.get("known_bad_years") or [])
+        break
+    return bad_years
 
 
 def _buyer_requires_awd(buyer: dict[str, Any]) -> bool:
@@ -131,13 +140,10 @@ def _append_trim_warnings(
     if not known_trims:
         return
 
-    trim = normalized.get("trim")
-    if not trim:
-        warnings.append(
-            f"Trim not specified for {recommendation['make']} {recommendation['model']}"
-        )
+    if "trim" not in normalized:
         return
 
+    trim = normalized["trim"]
     if trim.strip().casefold() not in known_trims:
         warnings.append(
             f"Trim '{trim}' is not a recognized trim for this model"
@@ -247,7 +253,7 @@ def score_listing_fit(
             warnings.append(NOT_AWD_WARNING)
             awd_requirement_met = False
 
-    if normalized["year"] in _known_bad_years(selected_year_range):
+    if normalized["year"] in _known_bad_years_for_recommendation(recommendation):
         score -= BAD_YEAR_PENALTY
         warnings.append(f"{normalized['year']} is a known weak year for this model")
 
