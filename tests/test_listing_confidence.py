@@ -23,11 +23,42 @@ def _complete_corolla_raw() -> dict:
     }
 
 
-def test_high_confidence_for_complete_explicit_listing():
+@pytest.fixture
+def student_buyer() -> dict:
+    return {
+        "id": "student",
+        "budget_type": {"type": "max_purchase", "max_amount": 12_000},
+        "max_mileage": 130_000,
+        "hard_requirements": ["price_under_budget"],
+    }
+
+
+@pytest.fixture
+def student_corolla_recommendation() -> dict:
+    return {
+        "make": "Toyota",
+        "model": "Corolla",
+        "selected_year_range": {"start_year": 2014, "end_year": 2018},
+    }
+
+
+def test_assess_listing_confidence_requires_fit():
     raw = _complete_corolla_raw()
     normalized = normalize_listing(raw)
 
-    result = assess_listing_confidence(raw, normalized)
+    with pytest.raises(TypeError, match="fit is required"):
+        assess_listing_confidence(raw, normalized, fit=None)  # type: ignore[arg-type]
+
+
+def test_high_confidence_for_complete_explicit_listing(
+    student_buyer: dict,
+    student_corolla_recommendation: dict,
+):
+    raw = _complete_corolla_raw()
+    normalized = normalize_listing(raw)
+    fit = score_listing_fit(raw, student_corolla_recommendation, student_buyer)
+
+    result = assess_listing_confidence(raw, normalized, fit=fit)
 
     assert result["confidence_level"] == "High"
     assert result["inferred_fields"] == []
@@ -36,7 +67,10 @@ def test_high_confidence_for_complete_explicit_listing():
     assert result["conflicting_signals"] is False
 
 
-def test_medium_confidence_when_price_missing():
+def test_medium_confidence_when_price_missing(
+    student_buyer: dict,
+    student_corolla_recommendation: dict,
+):
     raw = {
         "make": "Toyota",
         "model": "Corolla",
@@ -45,14 +79,18 @@ def test_medium_confidence_when_price_missing():
         "clean_title": True,
     }
     normalized = normalize_listing(raw)
+    fit = score_listing_fit(raw, student_corolla_recommendation, student_buyer)
 
-    result = assess_listing_confidence(raw, normalized)
+    result = assess_listing_confidence(raw, normalized, fit=fit)
 
     assert result["confidence_level"] == "Medium"
     assert result["missing_fields"] == ["price"]
 
 
-def test_low_confidence_for_sparse_title_only_listing():
+def test_low_confidence_for_sparse_title_only_listing(
+    student_buyer: dict,
+    student_corolla_recommendation: dict,
+):
     raw = {
         "title": "2016 Toyota Corolla LE 92k miles",
         "listing_url": "https://example.com/sparse",
@@ -61,12 +99,16 @@ def test_low_confidence_for_sparse_title_only_listing():
     inferred = detect_inferred_fields(raw, normalized)
 
     assert len(inferred) >= 2
-    result = assess_listing_confidence(raw, normalized)
+    fit = score_listing_fit(raw, student_corolla_recommendation, student_buyer)
+    result = assess_listing_confidence(raw, normalized, fit=fit)
 
     assert result["confidence_level"] == "Low"
 
 
-def test_low_confidence_when_title_mileage_is_ambiguous():
+def test_low_confidence_when_title_mileage_is_ambiguous(
+    student_buyer: dict,
+    student_corolla_recommendation: dict,
+):
     assert title_has_ambiguous_mileage(
         "new engine at 100k, now at 45k miles on 2016 Toyota Corolla"
     )
@@ -80,14 +122,18 @@ def test_low_confidence_when_title_mileage_is_ambiguous():
         "clean_title": True,
     }
     normalized = normalize_listing(raw)
+    fit = score_listing_fit(raw, student_corolla_recommendation, student_buyer)
 
-    result = assess_listing_confidence(raw, normalized)
+    result = assess_listing_confidence(raw, normalized, fit=fit)
 
     assert result["ambiguity_detected"] is True
     assert result["confidence_level"] == "Low"
 
 
-def test_medium_confidence_when_mileage_inferred_from_title():
+def test_medium_confidence_when_mileage_inferred_from_title(
+    student_buyer: dict,
+    student_corolla_recommendation: dict,
+):
     raw = {
         "make": "Toyota",
         "model": "Corolla",
@@ -101,7 +147,8 @@ def test_medium_confidence_when_mileage_inferred_from_title():
 
     assert "mileage" in detect_inferred_fields(raw, normalized)
 
-    result = assess_listing_confidence(raw, normalized)
+    fit = score_listing_fit(raw, student_corolla_recommendation, student_buyer)
+    result = assess_listing_confidence(raw, normalized, fit=fit)
 
     assert result["confidence_level"] == "Medium"
     assert result["inferred_fields"] == ["mileage"]
@@ -130,20 +177,24 @@ def test_low_confidence_when_fit_label_was_capped(
     assert result["confidence_level"] == "Low"
 
 
-@pytest.fixture
-def student_buyer() -> dict:
-    return {
-        "id": "student",
-        "budget_type": {"type": "max_purchase", "max_amount": 12_000},
-        "max_mileage": 130_000,
-        "hard_requirements": ["price_under_budget"],
-    }
-
-
-@pytest.fixture
-def student_corolla_recommendation() -> dict:
-    return {
+def test_stacked_violations_cannot_be_high_confidence(
+    student_buyer: dict,
+    student_corolla_recommendation: dict,
+):
+    raw = {
         "make": "Toyota",
         "model": "Corolla",
-        "selected_year_range": {"start_year": 2014, "end_year": 2018},
+        "year": 2016,
+        "mileage": 145_000,
+        "price": 15_000,
+        "clean_title": False,
     }
+    normalized = normalize_listing(raw)
+    fit = score_listing_fit(raw, student_corolla_recommendation, student_buyer)
+
+    result = assess_listing_confidence(raw, normalized, fit=fit)
+
+    assert result["confidence_level"] != "High"
+    assert "Dirty title" in fit["negative_reasons"]
+    assert any("Over budget" in reason for reason in fit["negative_reasons"])
+    assert any("Mileage exceeds" in reason for reason in fit["negative_reasons"])

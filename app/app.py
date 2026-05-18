@@ -101,7 +101,9 @@ def _enrich_entry(
     listing_name = entry["listing_name"]
     raw = raw_listings.get(listing_name, entry["listing"])
     normalized = entry["listing"]
-    confidence = assess_listing_confidence(raw, normalized, fit=entry["fit"])
+    confidence = entry["fit"].get("confidence")
+    if confidence is None:
+        confidence = assess_listing_confidence(raw, normalized, fit=entry["fit"])
     return {**entry, "raw_listing": raw, "confidence": confidence}
 
 

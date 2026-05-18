@@ -142,11 +142,48 @@ def test_unmatched_bmw_warning_does_not_match_any_recommended_model(ranked_stude
     assert any("BMW 328i" in warning for warning in bmw["fit"]["warnings"])
 
 
-def test_listings_inside_group_sorted_by_fit_score_descending(ranked_student):
+def test_listings_inside_group_sorted_by_fit_label_then_score(ranked_student):
     group = _group_by_model(ranked_student, "Corolla")
     assert group is not None
-    scores = [entry["fit"]["fit_score"] for entry in group["listings"]]
-    assert scores == sorted(scores, reverse=True)
+    label_rank = {"Strong fit": 0, "Moderate fit": 1, "Weak fit": 2}
+    labels = [label_rank[entry["fit"]["fit_label"]] for entry in group["listings"]]
+    assert labels == sorted(labels)
+
+
+def test_strong_fit_never_ranks_below_moderate_fit():
+    recommendation = _corolla_recommendation()
+    buyer = _buyer("student")
+    strong_listing = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 10500,
+        "clean_title": True,
+        "trim": "LE",
+    }
+    moderate_listing = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 140000,
+        "price": 10500,
+        "clean_title": True,
+        "trim": "LE",
+    }
+    strong_fit = score_listing_fit(strong_listing, recommendation, buyer)
+    moderate_fit = score_listing_fit(moderate_listing, recommendation, buyer)
+
+    assert strong_fit["fit_label"] == "Strong fit"
+    assert moderate_fit["fit_label"] == "Moderate fit"
+
+    order = _rank_toyota_listings(
+        [
+            ("moderate_first", moderate_listing),
+            ("strong_second", strong_listing),
+        ]
+    )
+    assert order.index("strong_second") < order.index("moderate_first")
 
 
 def test_stacked_risk_corolla_is_weak_fit_and_below_good_corolla(ranked_student):

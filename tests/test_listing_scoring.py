@@ -104,7 +104,11 @@ def test_known_bad_year_gets_warning():
     assert any("known weak year" in warning.lower() for warning in result["warnings"])
 
 
-def test_known_bad_year_uses_vehicle_profile_not_only_selected_range():
+def test_outside_range_year_does_not_also_emit_known_bad_year_warning():
+    # Civic 2016 is outside the selected 2012-2015 range AND in known_bad_years
+    # for the 2016-2021 range.  F7 guards the known-bad-year check to only fire
+    # when year_in_range is True; the "outside the recommended range" warning
+    # is already sufficient signal.
     listing = {
         "make": "Honda",
         "model": "Civic",
@@ -117,10 +121,33 @@ def test_known_bad_year_uses_vehicle_profile_not_only_selected_range():
         listing, _civic_recommendation_2012_2015_range(), _buyer("student")
     )
 
-    assert any("known weak year" in warning.lower() for warning in result["warnings"])
     assert any(
-        "outside the recommended" in warning for warning in result["warnings"]
+        "outside the recommended" in w for w in result["warnings"]
+    ), "should warn that year is outside the recommended range"
+    assert not any(
+        "known weak year" in w.lower() for w in result["warnings"]
+    ), "should NOT emit redundant known-bad-year when year is already outside range"
+
+
+def test_known_bad_year_within_selected_range_emits_warning():
+    # Civic 2016 IS within the 2016-2021 range and is a known-bad year —
+    # the warning should fire here.
+    listing = {
+        "make": "Honda",
+        "model": "Civic",
+        "year": 2016,
+        "mileage": 80000,
+        "price": 10000,
+        "clean_title": True,
+    }
+    result = score_listing_fit(
+        listing, _civic_recommendation_with_bad_years(), _buyer("student")
     )
+
+    assert any(
+        "known weak year" in w.lower() for w in result["warnings"]
+    ), "should warn that 2016 is a known weak year within the selected 2016-2021 range"
+    assert result["fit_label"] != "Strong fit"
 
 
 def test_wrong_model_gets_weak_fit():
@@ -464,3 +491,66 @@ def test_unrecognized_trim_still_emits_warning():
     result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
 
     assert any("not a recognized trim" in warning for warning in result["warnings"])
+
+
+def test_severe_over_mileage_is_weak_fit():
+    # >1.5x mileage limit must be Weak fit, not Moderate.
+    # 130,000 * 1.5 = 195,000; use 260,000 to be unambiguously severe.
+    listing = _clean_corolla_listing(mileage=260000)
+    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+
+    assert result["fit_label"] == "Weak fit", (
+        f"260k miles should be Weak fit, got {result['fit_label']!r}"
+    )
+    assert any("exceeds" in w.lower() for w in result["warnings"])
+
+
+def test_just_over_mileage_limit_is_moderate_fit_not_weak():
+    # Barely over the limit stays at Moderate fit, not Weak.
+    listing = _clean_corolla_listing(mileage=131000)
+    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+
+    assert result["fit_label"] == "Moderate fit", (
+        f"131k miles should be Moderate fit, got {result['fit_label']!r}"
+    )
+
+
+def test_known_bad_year_outback_is_not_strong_fit():
+    # Outback 2013 is inside the 2013-2019 range but is a known-bad year;
+    # the cap must prevent Strong fit even when all other factors are perfect.
+    outdoor_buyer = _buyer("outdoor_snow")
+    rec = {
+        "make": "Subaru",
+        "model": "Outback",
+        "selected_year_range": {"start_year": 2013, "end_year": 2019},
+    }
+    listing = {
+        "make": "Subaru",
+        "model": "Outback",
+        "year": 2013,
+        "mileage": 80000,
+        "price": 18000,
+        "clean_title": True,
+        "drive_type": "awd",
+    }
+    result = score_listing_fit(listing, rec, outdoor_buyer)
+
+    assert result["fit_label"] != "Strong fit", (
+        f"Outback 2013 (known bad year) should not be Strong fit, got {result['fit_label']!r}"
+    )
+    assert any("known weak year" in w.lower() for w in result["warnings"])
+
+
+def test_missing_mileage_is_not_strong_fit():
+    # Missing odometer data must never produce Strong fit.
+    listing = _clean_corolla_listing()
+    del listing["mileage"]
+    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+
+    assert result["fit_label"] != "Strong fit", (
+        f"missing mileage should not be Strong fit, got {result['fit_label']!r}"
+    )
+    assert any(
+        "not disclosed" in w.lower() or "unavailable" in w.lower()
+        for w in result["warnings"]
+    )

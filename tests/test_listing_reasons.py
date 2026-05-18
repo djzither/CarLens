@@ -1,5 +1,10 @@
 from src.listings.listing_fit import score_listing_fit
-from src.listings.listing_reasons import build_listing_reasons
+from src.listings.listing_reasons import (
+    AWD_NOT_DISCLOSED_NEGATIVE,
+    AWD_NOT_MET_NEGATIVE,
+    UNDISCLOSED_TITLE_NEGATIVE,
+    build_listing_reasons,
+)
 from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.recommendation_engine import recommend
 
@@ -91,7 +96,7 @@ def test_dirty_title_and_known_bad_year_near_top_of_negatives():
         "Dirty title",
         "Known problematic model year",
     ]
-    assert "Strong model match" in reasons["positive_reasons"]
+    assert "Strong model match" not in reasons["positive_reasons"]
     assert "Within recommended year range" not in reasons["positive_reasons"]
 
 
@@ -160,6 +165,75 @@ def test_awd_listing_includes_matches_requested_awd_positive():
     )
 
     assert "Matches requested AWD" in reasons["positive_reasons"]
+
+
+def test_undisclosed_title_adds_negative_reason():
+    reasons = build_listing_reasons(
+        _clean_corolla_listing(clean_title=None),
+        _buyer("student"),
+        _corolla_recommendation(),
+    )
+
+    assert UNDISCLOSED_TITLE_NEGATIVE in reasons["negative_reasons"]
+
+
+def test_fwd_listing_adds_awd_negative_for_snow_buyer():
+    recommendation = next(
+        item
+        for item in recommend("outdoor_snow")["recommendations"]
+        if item["model"] == "Outback"
+    )
+    listing = {
+        "make": "Subaru",
+        "model": "Outback",
+        "year": 2016,
+        "mileage": 95000,
+        "price": 18500,
+        "clean_title": True,
+        "drive_type": "fwd",
+    }
+    reasons = build_listing_reasons(
+        listing, _buyer("outdoor_snow"), recommendation
+    )
+
+    assert AWD_NOT_MET_NEGATIVE in reasons["negative_reasons"]
+
+
+def test_missing_drive_type_adds_awd_disclosure_negative():
+    recommendation = next(
+        item
+        for item in recommend("outdoor_snow")["recommendations"]
+        if item["model"] == "Outback"
+    )
+    listing = {
+        "make": "Subaru",
+        "model": "Outback",
+        "year": 2016,
+        "mileage": 95000,
+        "price": 18500,
+        "clean_title": True,
+    }
+    reasons = build_listing_reasons(
+        listing, _buyer("outdoor_snow"), recommendation
+    )
+
+    assert AWD_NOT_DISCLOSED_NEGATIVE in reasons["negative_reasons"]
+
+
+def test_two_or_more_negatives_suppress_strong_model_match():
+    reasons = build_listing_reasons(
+        _clean_corolla_listing(
+            year=2009,
+            price=15000,
+            mileage=140000,
+            clean_title=False,
+        ),
+        _buyer("student"),
+        _corolla_recommendation(),
+    )
+
+    assert len(reasons["negative_reasons"]) >= 2
+    assert "Strong model match" not in reasons["positive_reasons"]
 
 
 def test_known_bad_year_from_vehicle_profile_when_selected_range_differs():
