@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.listings.listing_deduper import dedupe_listings
 from src.listings.listing_fit import score_listing_fit
 from src.listings.listing_normalizer import normalize_listing
 
@@ -23,6 +24,15 @@ def _model_key(make: str, model: str) -> tuple[str, str]:
 def _prepare_listing(listing: dict[str, Any]) -> dict[str, Any]:
     """Normalize a raw or canonical listing once for grouping and scoring."""
     return normalize_listing(listing)
+
+
+def _dedupe_prepared_entries(
+    entries: list[tuple[int, str, dict[str, Any]]],
+) -> list[tuple[int, str, dict[str, Any]]]:
+    """Drop duplicate normalized listings while keeping the most complete record."""
+    survivors = dedupe_listings([listing for _, _, listing in entries])
+    survivor_ids = {id(listing) for listing in survivors}
+    return [entry for entry in entries if id(entry[2]) in survivor_ids]
 
 
 def _listing_model_key(listing: dict[str, Any]) -> tuple[str, str]:
@@ -110,6 +120,7 @@ def rank_listings_by_recommendation(
     unmatched_entries: list[tuple[int, str, dict[str, Any]]] = []
     invalid_listings: list[dict[str, Any]] = []
 
+    prepared_entries: list[tuple[int, str, dict[str, Any]]] = []
     for index, (listing_name, raw_listing) in enumerate(listings):
         try:
             listing = _prepare_listing(raw_listing)
@@ -122,7 +133,9 @@ def rank_listings_by_recommendation(
                 }
             )
             continue
+        prepared_entries.append((index, listing_name, listing))
 
+    for index, listing_name, listing in _dedupe_prepared_entries(prepared_entries):
         key = _listing_model_key(listing)
         if key in lookup:
             buckets.setdefault(key, []).append((index, listing_name, listing))

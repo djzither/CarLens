@@ -498,6 +498,33 @@ def test_raw_listing_missing_optional_fields_does_not_crash_ranker():
     assert any("mileage not disclosed" in warning.lower() for warning in fit["warnings"])
 
 
+def test_ranker_dedupes_duplicate_listing_urls():
+    duplicate_url = "https://example.com/listing/abc123"
+    sparse = {
+        "title": "2016 Toyota Corolla LE 92k miles",
+        "listing_url": duplicate_url,
+    }
+    complete = {
+        "title": "2016 Toyota Corolla LE clean title 92k miles",
+        "price": "$10,500",
+        "listing_url": duplicate_url,
+    }
+    ranked = rank_listings_by_recommendation(
+        [
+            ("sparse_corolla", sparse),
+            ("complete_corolla", complete),
+        ],
+        [_corolla_recommendation()],
+        _buyer("student"),
+    )
+
+    group = _group_by_model(ranked, "Corolla")
+    assert group is not None
+    assert len(group["listings"]) == 1
+    assert group["listings"][0]["listing_name"] == "complete_corolla"
+    assert group["listings"][0]["listing"]["price"] == 10500
+
+
 def test_canonical_listing_preserved_in_ranked_output():
     structured = {
         "make": "Toyota",
