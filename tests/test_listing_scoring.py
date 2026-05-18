@@ -2,6 +2,7 @@ import pytest
 
 from src.listings.listing_fit import (
     MISSING_MILEAGE_WARNING,
+    MISSING_PRICE_WARNING,
     MISSING_TITLE_WARNING,
     score_listing_fit,
 )
@@ -329,14 +330,28 @@ def test_severely_over_mileage_is_not_strong_fit():
     assert any("exceeds" in warning.lower() for warning in result["warnings"])
 
 
-def test_missing_price_emits_warning():
-    listing = {
-        "make": "Toyota",
-        "model": "Corolla",
-        "year": 2016,
-        "mileage": 85000,
-        "clean_title": True,
-    }
-    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+def test_missing_price_scores_below_in_budget_listing():
+    recommendation = _corolla_recommendation()
+    buyer = _buyer("student")
+    in_budget = score_listing_fit(_clean_corolla_listing(), recommendation, buyer)
+    missing_listing = _clean_corolla_listing()
+    del missing_listing["price"]
+    missing = score_listing_fit(missing_listing, recommendation, buyer)
 
-    assert any("price was not provided" in warning.lower() for warning in result["warnings"])
+    assert MISSING_PRICE_WARNING in missing["warnings"]
+    assert missing["fit_score"] < in_budget["fit_score"]
+    assert any("price" in reason.lower() for reason in in_budget["reasons"])
+    assert not any("price" in reason.lower() for reason in missing["reasons"])
+
+
+def test_missing_price_is_not_strong_fit():
+    missing_listing = _clean_corolla_listing()
+    del missing_listing["price"]
+    result = score_listing_fit(
+        missing_listing, _corolla_recommendation(), _buyer("student")
+    )
+
+    assert result["fit_label"] != "Strong fit"
+    assert any(
+        "price was not provided" in warning.lower() for warning in result["warnings"]
+    )

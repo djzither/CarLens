@@ -60,6 +60,7 @@ def _cap_fit_label(
     has_year_range: bool,
     awd_requirement_met: bool = True,
     severe_over_budget: bool = False,
+    missing_price: bool = False,
     over_mileage_limit: bool = False,
     severe_over_mileage: bool = False,
 ) -> str:
@@ -73,6 +74,8 @@ def _cap_fit_label(
         if has_year_range and not year_in_range:
             return "Moderate fit"
         if not awd_requirement_met:
+            return "Moderate fit"
+        if missing_price:
             return "Moderate fit"
         if over_mileage_limit:
             return "Moderate fit"
@@ -187,23 +190,24 @@ def score_listing_fit(
 
     budget_max = _budget_max(buyer)
     severe_over_budget = False
-    if "price" in normalized:
-        if normalized["price"] <= budget_max:
-            score += PRICE_UNDER_BUDGET_POINTS
-            if model_matches:
-                reasons.append(
-                    f"Price ${normalized['price']:,} is within your ${budget_max:,} budget"
-                )
-        else:
-            score -= OVER_BUDGET_PENALTY
-            warnings.append(
-                f"Price ${normalized['price']:,} exceeds your ${budget_max:,} budget"
-            )
-            if normalized["price"] >= budget_max * SEVERE_OVER_BUDGET_MULTIPLIER:
-                severe_over_budget = True
-        max_possible += PRICE_UNDER_BUDGET_POINTS
-    else:
+    missing_price = False
+    max_possible += PRICE_UNDER_BUDGET_POINTS
+    if "price" not in normalized:
+        missing_price = True
         warnings.append(MISSING_PRICE_WARNING)
+    elif normalized["price"] <= budget_max:
+        score += PRICE_UNDER_BUDGET_POINTS
+        if model_matches:
+            reasons.append(
+                f"Price ${normalized['price']:,} is within your ${budget_max:,} budget"
+            )
+    else:
+        score -= OVER_BUDGET_PENALTY
+        warnings.append(
+            f"Price ${normalized['price']:,} exceeds your ${budget_max:,} budget"
+        )
+        if normalized["price"] >= budget_max * SEVERE_OVER_BUDGET_MULTIPLIER:
+            severe_over_budget = True
 
     max_mileage = buyer.get("max_mileage")
     over_mileage_limit = False
@@ -270,6 +274,7 @@ def score_listing_fit(
         has_year_range=has_year_range,
         awd_requirement_met=awd_requirement_met,
         severe_over_budget=severe_over_budget,
+        missing_price=missing_price,
         over_mileage_limit=over_mileage_limit,
         severe_over_mileage=severe_over_mileage,
     )

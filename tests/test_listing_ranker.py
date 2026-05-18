@@ -313,6 +313,28 @@ def test_equal_fit_score_lower_price_ranks_higher():
     assert order.index("cheap_listing") < order.index("dear_listing")
 
 
+def test_missing_price_does_not_rank_above_clean_in_budget_listing():
+    in_budget = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 10500,
+        "clean_title": True,
+        "trim": "LE",
+    }
+    missing_price = dict(in_budget)
+    del missing_price["price"]
+
+    order = _rank_toyota_listings(
+        [
+            ("missing_price", missing_price),
+            ("in_budget", in_budget),
+        ]
+    )
+    assert order.index("in_budget") < order.index("missing_price")
+
+
 def test_ranking_order_is_deterministic_regardless_of_input_order():
     listings = [
         (
