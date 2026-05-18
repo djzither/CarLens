@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import copy
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import streamlit as st
 
@@ -39,7 +44,6 @@ from src.listings.listing_ranker import (
 from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.recommendation_engine import recommend
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SAMPLE_LISTINGS_DIR = PROJECT_ROOT / "data" / "sample_listings"
 
 DEMO_LISTING_SETS: dict[str, dict[str, str]] = {
