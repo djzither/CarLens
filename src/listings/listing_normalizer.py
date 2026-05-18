@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date
 from functools import lru_cache
 from typing import Any
 
@@ -43,6 +44,9 @@ _MILEAGE_MILES_IN_TEXT_RE = re.compile(
     re.IGNORECASE,
 )
 
+_MIN_LISTING_YEAR = 1980
+_MIN_PLAUSIBLE_MILEAGE = 100
+
 
 def parse_price(value: Any) -> int | None:
     """Parse marketplace price strings into whole-dollar amounts."""
@@ -62,6 +66,15 @@ def parse_price(value: Any) -> int | None:
     cleaned = text.replace(",", "").replace("$", "").strip()
     if cleaned.isdigit():
         return int(cleaned)
+
+    if "." in cleaned:
+        dollars, cents = cleaned.split(".", 1)
+        if not dollars.isdigit() or not cents.isdigit():
+            return None
+        if int(cents) != 0:
+            return None
+        return int(dollars)
+
     return None
 
 
@@ -108,6 +121,40 @@ def _known_vehicles() -> tuple[tuple[str, str], ...]:
         reverse=True,
     )
     return tuple(ordered)
+
+
+@lru_cache(maxsize=1)
+def _canonical_make_names() -> dict[str, str]:
+    names: dict[str, str] = {}
+    for make, _model in _known_vehicles():
+        names.setdefault(make.casefold(), make)
+    return names
+
+
+def _normalize_make(make: str) -> str:
+    stripped = make.strip()
+    if not stripped:
+        return stripped
+    return _canonical_make_names().get(stripped.casefold(), stripped)
+
+
+def _max_allowed_year() -> int:
+    return date.today().year + 1
+
+
+def _validate_year(year: int) -> int:
+    max_year = _max_allowed_year()
+    if year < _MIN_LISTING_YEAR or year > max_year:
+        raise ValueError(
+            f"listing.year must be between {_MIN_LISTING_YEAR} and {max_year}"
+        )
+    return year
+
+
+def _mileage_for_normalized_listing(parsed: int | None) -> int | None:
+    if parsed is None or parsed < _MIN_PLAUSIBLE_MILEAGE:
+        return None
+    return parsed
 
 
 def extract_year_make_model(title: str) -> dict[str, int | str | None]:
@@ -266,10 +313,12 @@ def normalize_listing(listing: dict[str, Any]) -> dict[str, Any]:
     if not make or not model:
         raise ValueError("listing.make and listing.model are required")
 
+    make = _normalize_make(make)
+
     if "year" in raw and raw["year"] is not None:
-        year = _coerce_int(raw["year"], "listing.year")
+        year = _validate_year(_coerce_int(raw["year"], "listing.year"))
     elif extracted.get("year") is not None:
-        year = int(extracted["year"])
+        year = _validate_year(int(extracted["year"]))
     else:
         raise ValueError("listing missing fields: ['year']")
 
@@ -291,13 +340,13 @@ def normalize_listing(listing: dict[str, Any]) -> dict[str, Any]:
         if parsed_price is not None:
             normalized["price"] = parsed_price
     if "mileage" in raw and raw["mileage"] is not None:
-        parsed_mileage = parse_mileage(raw["mileage"])
-        if parsed_mileage is not None:
-            normalized["mileage"] = parsed_mileage
+        stored_mileage = _mileage_for_normalized_listing(parse_mileage(raw["mileage"]))
+        if stored_mileage is not None:
+            normalized["mileage"] = stored_mileage
     elif title:
-        mileage_from_title = _mileage_from_text(title)
-        if mileage_from_title is not None:
-            normalized["mileage"] = mileage_from_title
+        stored_mileage = _mileage_for_normalized_listing(_mileage_from_text(title))
+        if stored_mileage is not None:
+            normalized["mileage"] = stored_mileage
 
     if "trim" in raw and raw["trim"] is not None:
         trim = str(raw["trim"]).strip()

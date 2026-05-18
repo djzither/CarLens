@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 
 from src.listings.listing_normalizer import (
@@ -27,6 +29,22 @@ def test_parse_price_none_returns_none():
     assert parse_price(None) is None
 
 
+def test_parse_price_decimal_dollar_string():
+    assert parse_price("$10,500.00") == 10500
+
+
+def test_parse_price_decimal_plain_string():
+    assert parse_price("10500.00") == 10500
+
+
+def test_parse_price_single_decimal_zero():
+    assert parse_price("9995.0") == 9995
+
+
+def test_parse_price_non_zero_cents_returns_none():
+    assert parse_price("10500.50") is None
+
+
 def test_parse_mileage_k_abbreviation():
     assert parse_mileage("92k miles") == 92000
 
@@ -37,6 +55,23 @@ def test_parse_mileage_with_commas():
 
 def test_parse_mileage_plain_integer():
     assert parse_mileage("92000") == 92000
+
+
+def test_parse_mileage_still_allows_low_values():
+    assert parse_mileage(50) == 50
+
+
+def test_normalize_listing_drops_implausible_mileage():
+    result = normalize_listing(
+        {
+            "make": "Toyota",
+            "model": "Corolla",
+            "year": 2016,
+            "mileage": 50,
+        }
+    )
+
+    assert "mileage" not in result
 
 
 def test_detect_clean_title_positive():
@@ -171,3 +206,63 @@ def test_normalize_listing_requires_make_and_model():
 def test_normalize_listing_requires_year():
     with pytest.raises(ValueError, match="missing fields"):
         normalize_listing({"make": "Toyota", "model": "Corolla"})
+
+
+def test_normalize_listing_uppercase_make_uses_profile_casing():
+    result = normalize_listing(
+        {
+            "make": "TOYOTA",
+            "model": "Corolla",
+            "year": 2016,
+        }
+    )
+
+    assert result["make"] == "Toyota"
+
+
+def test_normalize_listing_preserves_model_casing():
+    result = normalize_listing(
+        {
+            "make": "mazda",
+            "model": "Mazda3",
+            "year": 2016,
+        }
+    )
+
+    assert result["make"] == "Mazda"
+    assert result["model"] == "Mazda3"
+
+
+def test_normalize_listing_allows_next_model_year():
+    next_year = date.today().year + 1
+    result = normalize_listing(
+        {
+            "make": "Toyota",
+            "model": "Corolla",
+            "year": next_year,
+        }
+    )
+
+    assert result["year"] == next_year
+
+
+def test_normalize_listing_rejects_year_before_1980():
+    with pytest.raises(ValueError, match="listing.year must be between"):
+        normalize_listing(
+            {
+                "make": "Toyota",
+                "model": "Corolla",
+                "year": 1979,
+            }
+        )
+
+
+def test_normalize_listing_rejects_year_beyond_next_model_year():
+    with pytest.raises(ValueError, match="listing.year must be between"):
+        normalize_listing(
+            {
+                "make": "Toyota",
+                "model": "Corolla",
+                "year": date.today().year + 2,
+            }
+        )
