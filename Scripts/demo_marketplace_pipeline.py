@@ -16,11 +16,13 @@ from src.listings.listing_ranker import rank_listings_for_recommendations
 from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.recommendation_engine import recommend
 
-SAMPLE_LISTINGS_PATH = PROJECT_ROOT / "data" / "sample_listings" / "student_listings.json"
+SAMPLE_LISTINGS_DIR = PROJECT_ROOT / "data" / "sample_listings"
+DEFAULT_LISTINGS_PATH = SAMPLE_LISTINGS_DIR / "student_listings.json"
+MESSY_LISTINGS_PATH = SAMPLE_LISTINGS_DIR / "messy_marketplace_demo.json"
 
 
 def load_sample_listings(
-    path: Path = SAMPLE_LISTINGS_PATH,
+    path: Path = DEFAULT_LISTINGS_PATH,
 ) -> tuple[str, list[tuple[str, dict[str, Any]]]]:
     with path.open(encoding="utf-8") as handle:
         data = json.load(handle)
@@ -93,9 +95,20 @@ def format_ranked_entry(entry: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="CarLens marketplace pipeline demo")
+    parser.add_argument(
+        "--messy",
+        action="store_true",
+        help="Use messy_marketplace_demo.json instead of student_listings.json",
+    )
+    args = parser.parse_args(argv)
+    listings_path = MESSY_LISTINGS_PATH if args.messy else DEFAULT_LISTINGS_PATH
+
     try:
-        buyer_profile_id, scenarios = load_sample_listings()
+        buyer_profile_id, scenarios = load_sample_listings(listings_path)
     except (OSError, json.JSONDecodeError, KeyError) as exc:
         print(f"Error loading sample listings: {exc}", file=sys.stderr)
         return 1

@@ -169,11 +169,10 @@ def test_low_confidence_when_fit_label_was_capped(
     normalized = normalize_listing(raw)
     fit = score_listing_fit(raw, student_corolla_recommendation, student_buyer)
 
-    assert fit["label_was_capped"] is True
+    assert fit["fit_label"] == "Weak fit"
 
     result = assess_listing_confidence(raw, normalized, fit=fit)
 
-    assert result["conflicting_signals"] is True
     assert result["confidence_level"] == "Low"
 
 

@@ -13,6 +13,13 @@ from src.listings.listing_fit import (
 )
 from src.listings.listing_normalizer import normalize_listing
 
+STRONG_MODEL_MATCH = "Strong model match"
+UNDISCLOSED_TITLE_NEGATIVE = (
+    "Title status not disclosed — verify before purchase"
+)
+AWD_NOT_MET_NEGATIVE = "Does not meet AWD requirement"
+AWD_NOT_DISCLOSED_NEGATIVE = "Drive type not disclosed — AWD required"
+
 
 def _wrong_model_reason(recommendation: dict[str, Any]) -> str:
     return (
@@ -47,6 +54,8 @@ def build_listing_reasons(
     negative_reasons: list[str] = []
     if clean_title is False:
         negative_reasons.append("Dirty title")
+    elif clean_title is None:
+        negative_reasons.append(UNDISCLOSED_TITLE_NEGATIVE)
     if known_bad_year:
         negative_reasons.append("Known problematic model year")
     if has_year_range and not year_in_range:
@@ -63,8 +72,16 @@ def build_listing_reasons(
         negative_reasons.append(
             f"Mileage exceeds preferred max by {over_miles:,}"
         )
+    if _buyer_requires_awd(buyer):
+        listing_drive = normalized.get("drive_type")
+        if not listing_drive:
+            negative_reasons.append(AWD_NOT_DISCLOSED_NEGATIVE)
+        elif listing_drive not in _AWD_DRIVE_TYPES:
+            negative_reasons.append(AWD_NOT_MET_NEGATIVE)
 
-    positive_reasons: list[str] = ["Strong model match"]
+    positive_reasons: list[str] = []
+    if len(negative_reasons) < 2:
+        positive_reasons.append(STRONG_MODEL_MATCH)
     if year_in_range and not known_bad_year:
         positive_reasons.append("Within recommended year range")
     if "price" in normalized and normalized["price"] <= budget_max:

@@ -69,6 +69,8 @@ def _cap_fit_label(
 ) -> str:
     if not model_matches:
         return "Weak fit"
+    if clean_title is False:
+        return "Weak fit"
     if severe_over_budget:
         return "Weak fit"
     if label == "Strong fit":
@@ -82,10 +84,10 @@ def _cap_fit_label(
             return "Moderate fit"
         if missing_mileage:
             return "Moderate fit"
-        if over_mileage_limit:
-            return "Moderate fit"
         if severe_over_mileage:
             return "Weak fit"
+        if over_mileage_limit:
+            return "Moderate fit"
         if known_bad_year:
             return "Moderate fit"
     return label
@@ -261,8 +263,6 @@ def score_listing_fit(
             warnings.append(NOT_AWD_WARNING)
             awd_requirement_met = False
 
-    # Only flag a known bad year when it is inside the selected range.
-    # When the year is already outside the range, that warning is sufficient.
     known_bad_year = (
         year_in_range
         and normalized["year"] in _known_bad_years_for_recommendation(recommendation)
@@ -306,7 +306,7 @@ def score_listing_fit(
 
     structured_reasons = build_listing_reasons(listing, buyer, recommendation)
 
-    return {
+    fit_result = {
         "fit_score": round(normalized_score, 3),
         "fit_label": label,
         "label_was_capped": raw_label != label,
@@ -315,3 +315,10 @@ def score_listing_fit(
         "positive_reasons": structured_reasons["positive_reasons"],
         "negative_reasons": structured_reasons["negative_reasons"],
     }
+
+    from src.listings.listing_confidence import assess_listing_confidence
+
+    confidence = assess_listing_confidence(listing, normalized, fit=fit_result)
+    fit_result["confidence"] = confidence
+    fit_result["confidence_level"] = confidence["confidence_level"]
+    return fit_result

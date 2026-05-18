@@ -33,6 +33,17 @@ from src.recommendation.recommendation_engine import recommend
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SAMPLE_LISTINGS_DIR = PROJECT_ROOT / "data" / "sample_listings"
 
+DEMO_LISTING_SETS: dict[str, dict[str, str]] = {
+    "basic": {
+        "label": "Basic Demo",
+        "filename": "student_listings.json",
+    },
+    "messy": {
+        "label": "Messy Marketplace Demo",
+        "filename": "messy_marketplace_demo.json",
+    },
+}
+
 _CONFIDENCE_COLORS = {
     "High": "#1b7f3a",
     "Medium": "#b8860b",
@@ -47,10 +58,9 @@ def _find_buyer(profiles: list[dict[str, Any]], buyer_profile_id: str) -> dict[s
     raise ValueError(f"buyer profile not found: {buyer_profile_id}")
 
 
-def load_sample_listings(
-    buyer_profile_id: str,
-) -> list[tuple[str, dict[str, Any]]]:
-    path = SAMPLE_LISTINGS_DIR / f"{buyer_profile_id}_listings.json"
+def load_sample_listings(dataset_key: str) -> list[tuple[str, dict[str, Any]]]:
+    dataset = DEMO_LISTING_SETS[dataset_key]
+    path = SAMPLE_LISTINGS_DIR / dataset["filename"]
     with path.open(encoding="utf-8") as handle:
         data = json.load(handle)
     return [(entry["id"], entry["listing"]) for entry in data["listings"]]
@@ -348,6 +358,13 @@ def main() -> None:
         require_awd = st.checkbox("Require AWD / 4WD", value=default_awd)
 
         st.divider()
+        listing_dataset = st.selectbox(
+            "Listing dataset",
+            list(DEMO_LISTING_SETS),
+            format_func=lambda key: DEMO_LISTING_SETS[key]["label"],
+        )
+
+        st.divider()
         pipeline_clicked = st.button("Refresh recommendations", type="primary")
         render_compare_sidebar_hint()
 
@@ -359,14 +376,14 @@ def main() -> None:
     )
 
     try:
-        listings = load_sample_listings(selected_id)
+        listings = load_sample_listings(listing_dataset)
     except (OSError, json.JSONDecodeError, KeyError) as exc:
         st.error(f"Could not load sample listings: {exc}")
         return
 
     raw_lookup = {name: raw for name, raw in listings}
 
-    prefs_key = (selected_id, budget_max, max_mileage, require_awd)
+    prefs_key = (selected_id, listing_dataset, budget_max, max_mileage, require_awd)
     needs_refresh = (
         pipeline_clicked
         or st.session_state.get("prefs_key") != prefs_key

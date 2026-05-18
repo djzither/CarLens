@@ -2,6 +2,14 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from src.listings.listing_fit import (
+    DIRTY_TITLE_WARNING,
+    MISSING_DRIVE_TYPE_WARNING,
+    MISSING_MILEAGE_WARNING,
+    MISSING_PRICE_WARNING,
+    MISSING_TITLE_WARNING,
+    NOT_AWD_WARNING,
+)
 from src.listings.listing_normalizer import (
     _mileage_candidates_from_text,
     _resolved_title,
@@ -13,6 +21,30 @@ from src.listings.listing_normalizer import (
 ConfidenceLevel = Literal["High", "Medium", "Low"]
 
 _CORE_FIELDS = ("price", "mileage", "clean_title")
+
+_HIGH_BLOCKING_NEGATIVE_MARKERS = (
+    "Dirty title",
+    "Over budget by",
+    "Mileage exceeds preferred max",
+    "Title status not disclosed",
+    "Does not meet AWD requirement",
+    "Drive type not disclosed",
+    "Known problematic model year",
+    "Year outside recommended range",
+    "Not the recommended",
+)
+
+_SEVERE_WARNING_MARKERS = (
+    DIRTY_TITLE_WARNING,
+    MISSING_TITLE_WARNING,
+    MISSING_PRICE_WARNING,
+    MISSING_MILEAGE_WARNING,
+    MISSING_DRIVE_TYPE_WARNING,
+    NOT_AWD_WARNING,
+    "exceeds your",
+    "known weak year",
+    "outside the recommended",
+)
 
 
 def _listing_title(raw: dict[str, Any]) -> str | None:
@@ -74,11 +106,31 @@ def _missing_core_fields(normalized: dict[str, Any]) -> list[str]:
     return [field for field in _CORE_FIELDS if field not in normalized]
 
 
-def _has_conflicting_signals(fit: dict[str, Any] | None) -> bool:
-    if not fit:
-        return False
+def _negative_blocks_high_confidence(negative: str) -> bool:
+    return any(marker in negative for marker in _HIGH_BLOCKING_NEGATIVE_MARKERS)
+
+
+def _warning_blocks_high_confidence(warning: str) -> bool:
+    return any(marker in warning for marker in _SEVERE_WARNING_MARKERS)
+
+
+def _fit_blocks_high_confidence(fit: dict[str, Any]) -> bool:
+    if fit.get("fit_label") == "Weak fit":
+        return True
     if fit.get("label_was_capped"):
         return True
+    negatives = fit.get("negative_reasons") or []
+    if len(negatives) >= 2:
+        return True
+    if any(_negative_blocks_high_confidence(negative) for negative in negatives):
+        return True
+    warnings = fit.get("warnings") or []
+    if any(_warning_blocks_high_confidence(warning) for warning in warnings):
+        return True
+    return False
+
+
+def _has_conflicting_signals(fit: dict[str, Any]) -> bool:
     positives = fit.get("positive_reasons") or []
     negatives = fit.get("negative_reasons") or []
     if positives and negatives and "Strong model match" in positives:
@@ -92,28 +144,35 @@ def assess_listing_confidence(
     raw_listing: dict[str, Any],
     normalized: dict[str, Any],
     *,
-    fit: dict[str, Any] | None = None,
+    fit: dict[str, Any],
 ) -> dict[str, Any]:
     """Score how trustworthy listing data is for display and decisions."""
+    if fit is None:
+        raise TypeError("fit is required")
+
     inferred_fields = detect_inferred_fields(raw_listing, normalized)
     missing_fields = _missing_core_fields(normalized)
     title = _listing_title(raw_listing)
     ambiguity_detected = title_has_ambiguous_mileage(title)
     conflicting_signals = _has_conflicting_signals(fit)
-    warning_count = len(fit.get("warnings", [])) if fit else 0
+    warning_count = len(fit.get("warnings", []))
     core_present = len(_CORE_FIELDS) - len(missing_fields)
+    blocks_high = _fit_blocks_high_confidence(fit)
 
     low = (
-        ambiguity_detected
+        fit.get("fit_label") == "Weak fit"
+        or ambiguity_detected
         or len(inferred_fields) >= 2
         or core_present < 2
         or conflicting_signals
         or warning_count >= 3
+        or (blocks_high and warning_count >= 2)
     )
     if low:
         level: ConfidenceLevel = "Low"
     elif (
-        len(inferred_fields) == 1
+        blocks_high
+        or len(inferred_fields) == 1
         or len(missing_fields) == 1
         or warning_count >= 1
     ):

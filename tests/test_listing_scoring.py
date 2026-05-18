@@ -224,8 +224,7 @@ def test_dirty_title_corolla_cannot_be_strong_fit():
     }
     result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
 
-    assert result["fit_label"] != "Strong fit"
-    assert result["fit_label"] == "Moderate fit"
+    assert result["fit_label"] == "Weak fit"
 
 
 def test_dirty_title_gets_warning():
@@ -241,6 +240,20 @@ def test_dirty_title_gets_warning():
 
     assert any("clean title" in warning.lower() for warning in result["warnings"])
     assert any("salvage" in warning.lower() for warning in result["warnings"])
+
+
+def test_dirty_title_is_always_weak_fit():
+    listing = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 10500,
+        "clean_title": False,
+    }
+    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+
+    assert result["fit_label"] == "Weak fit"
 
 
 def test_missing_year_range_does_not_lower_fit_score():

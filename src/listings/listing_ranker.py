@@ -17,6 +17,12 @@ _FIT_LABEL_STRENGTH = {
     "Weak fit": 2,
 }
 
+_CONFIDENCE_STRENGTH = {
+    "High": 0,
+    "Medium": 1,
+    "Low": 2,
+}
+
 _MISSING_NUMERIC_TIE_BREAK = 2**31 - 1
 
 
@@ -102,6 +108,7 @@ def _unmatched_fit(listing: dict[str, Any]) -> dict[str, Any]:
         "warnings": [unmatched_warning],
         "positive_reasons": [],
         "negative_reasons": [unmatched_warning],
+        "confidence_level": "Low",
     }
 
 
@@ -129,14 +136,22 @@ def _tie_break_mileage(listing: dict[str, Any]) -> int:
     return int(mileage)
 
 
+def _confidence_sort_rank(fit: dict[str, Any]) -> int:
+    confidence = fit.get("confidence_level")
+    if confidence is None:
+        confidence = (fit.get("confidence") or {}).get("confidence_level", "Low")
+    return _CONFIDENCE_STRENGTH.get(confidence, len(_CONFIDENCE_STRENGTH))
+
+
 def _listing_sort_key(
     listing_name: str,
     listing: dict[str, Any],
     fit: dict[str, Any],
 ) -> tuple[Any, ...]:
     return (
-        -fit["fit_score"],
         _FIT_LABEL_STRENGTH.get(fit["fit_label"], len(_FIT_LABEL_STRENGTH)),
+        _confidence_sort_rank(fit),
+        -fit["fit_score"],
         len(fit["warnings"]),
         _tie_break_price(listing),
         _tie_break_mileage(listing),
