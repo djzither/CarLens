@@ -144,6 +144,20 @@ def _listing_sort_key(
     )
 
 
+def pick_best_listing(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return the best listing entry using the same ordering as ranked groups."""
+    if not entries:
+        raise ValueError("entries must not be empty")
+    return min(
+        entries,
+        key=lambda entry: _listing_sort_key(
+            entry["listing_name"],
+            entry["listing"],
+            entry["fit"],
+        ),
+    )
+
+
 def _sort_scored_listings(
     entries: list[tuple[int, str, dict[str, Any], dict[str, Any]]],
 ) -> list[dict[str, Any]]:

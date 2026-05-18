@@ -85,7 +85,7 @@ def _cap_fit_label(
         if over_mileage_limit:
             return "Moderate fit"
         if severe_over_mileage:
-            return "Moderate fit"
+            return "Weak fit"
         if known_bad_year:
             return "Moderate fit"
     return label
@@ -261,8 +261,11 @@ def score_listing_fit(
             warnings.append(NOT_AWD_WARNING)
             awd_requirement_met = False
 
-    known_bad_year = normalized["year"] in _known_bad_years_for_recommendation(
-        recommendation
+    # Only flag a known bad year when it is inside the selected range.
+    # When the year is already outside the range, that warning is sufficient.
+    known_bad_year = (
+        year_in_range
+        and normalized["year"] in _known_bad_years_for_recommendation(recommendation)
     )
     if known_bad_year:
         score -= BAD_YEAR_PENALTY

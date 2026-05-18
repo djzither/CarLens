@@ -9,8 +9,24 @@ from typing import Any
 
 import streamlit as st
 
+from src.listings.listing_compare import (
+    COMPARE_TABLE_ROWS,
+    MAX_COMPARE_LISTINGS,
+    MIN_COMPARE_LISTINGS,
+    build_compare_row,
+    collect_selected_compare_ids,
+    compare_checkbox_key,
+    compare_id_from_checkbox_key,
+    count_selected_compare,
+    make_compare_id,
+    resolve_compare_entries,
+    validate_compare_selection,
+)
 from src.listings.listing_confidence import assess_listing_confidence
-from src.listings.listing_ranker import rank_listings_for_recommendations
+from src.listings.listing_ranker import (
+    pick_best_listing,
+    rank_listings_for_recommendations,
+)
 from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.recommendation_engine import recommend
 
@@ -89,6 +105,30 @@ def _enrich_entry(
     return {**entry, "raw_listing": raw, "confidence": confidence}
 
 
+def build_compare_catalog(
+    ranked: dict[str, Any],
+    raw_listings: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    catalog: dict[str, dict[str, Any]] = {}
+
+    for group in ranked.get("groups") or []:
+        make = group["make"]
+        model = group["model"]
+        for entry in group.get("listings") or []:
+            enriched = _enrich_entry(entry, raw_listings)
+            compare_id = make_compare_id(make, model, entry["listing_name"])
+            enriched["compare_id"] = compare_id
+            catalog[compare_id] = enriched
+
+    for entry in ranked.get("unmatched_listings") or []:
+        enriched = _enrich_entry(entry, raw_listings)
+        compare_id = make_compare_id("Other", "Unmatched", entry["listing_name"])
+        enriched["compare_id"] = compare_id
+        catalog[compare_id] = enriched
+
+    return catalog
+
+
 def _fit_badge_color(fit_label: str) -> str:
     if fit_label == "Strong fit":
         return "#1b7f3a"
@@ -100,12 +140,16 @@ def _fit_badge_color(fit_label: str) -> str:
 def render_listing_card(
     entry: dict[str, Any],
     *,
-    compare_key: str,
+    compare_id: str,
+    selected_count: int,
 ) -> None:
     listing = entry["listing"]
     fit = entry["fit"]
     confidence = entry["confidence"]
     level = confidence["confidence_level"]
+    checkbox_key = compare_checkbox_key(compare_id)
+    is_selected = bool(st.session_state.get(checkbox_key))
+    at_limit = selected_count >= MAX_COMPARE_LISTINGS and not is_selected
 
     header_cols = st.columns([5, 1])
     with header_cols[0]:
@@ -119,7 +163,16 @@ def render_listing_card(
             unsafe_allow_html=True,
         )
     with header_cols[1]:
-        st.checkbox("Compare", key=compare_key)
+        st.checkbox(
+            "Compare",
+            key=checkbox_key,
+            disabled=at_limit,
+            help=(
+                f"Select up to {MAX_COMPARE_LISTINGS} listings to compare."
+                if at_limit
+                else None
+            ),
+        )
 
     if fit.get("warnings"):
         warning_html = " ".join(
@@ -153,6 +206,8 @@ def render_listing_card(
 def render_vehicle_section(
     group: dict[str, Any],
     raw_listings: dict[str, dict[str, Any]],
+    *,
+    selected_count: int,
 ) -> None:
     make = group["make"]
     model = group["model"]
@@ -166,24 +221,90 @@ def render_vehicle_section(
         st.info(group.get("coverage_message", "No matching listings found"))
         return
 
-    enriched = [_enrich_entry(entry, raw_listings) for entry in listings]
-    for entry in enriched:
-        compare_key = f"compare_{group['make']}_{group['model']}_{entry['listing_name']}"
+    for entry in listings:
+        compare_id = make_compare_id(make, model, entry["listing_name"])
+        enriched = _enrich_entry(entry, raw_listings)
         with st.container(border=True):
-            render_listing_card(entry, compare_key=compare_key)
+            render_listing_card(
+                enriched,
+                compare_id=compare_id,
+                selected_count=selected_count,
+            )
 
 
-def render_compare_tray() -> None:
-    selected: list[str] = []
-    for key, value in st.session_state.items():
-        if key.startswith("compare_") and value:
-            selected.append(key.removeprefix("compare_"))
-    if not selected:
+def _render_compare_cell(field_key: str, value: str) -> None:
+    if field_key == "source_link" and value.startswith("http"):
+        st.markdown(f"[Open listing]({value})")
+    else:
+        st.markdown(value.replace("\n", "  \n"))
+
+
+def clear_compare_selection() -> None:
+    for key in list(st.session_state.keys()):
+        if compare_id_from_checkbox_key(str(key)) is not None:
+            st.session_state[key] = False
+
+
+def render_compare_mode(catalog: dict[str, dict[str, Any]]) -> None:
+    selected_ids = collect_selected_compare_ids(st.session_state)
+    if not selected_ids:
         return
+
     st.divider()
-    st.markdown(f"**Compare selected** ({len(selected)})")
-    for name in selected:
-        st.markdown(f"- `{name}`")
+    st.subheader("Compare mode")
+    st.caption(
+        f"Select {MIN_COMPARE_LISTINGS}–{MAX_COMPARE_LISTINGS} listings using the "
+        "Compare checkboxes above."
+    )
+
+    validation_error = validate_compare_selection(len(selected_ids))
+    if validation_error:
+        st.info(validation_error)
+        if st.button("Clear comparison selection"):
+            clear_compare_selection()
+            st.rerun()
+        return
+
+    entries = resolve_compare_entries(catalog, selected_ids)
+    rows = [build_compare_row(entry) for entry in entries]
+    best = pick_best_listing(entries)
+    best_row = build_compare_row(best)
+
+    st.success(
+        f"**Best option:** {best['listing_name']} — "
+        f"{best_row['fit_label']} (score {best_row['score']}, "
+        f"confidence {best_row['confidence']})"
+    )
+
+    header_cols = st.columns([1] + [1] * len(entries))
+    header_cols[0].markdown("**Field**")
+    for index, entry in enumerate(entries):
+        header_cols[index + 1].markdown(f"**{entry['listing_name']}**")
+
+    for field_key, field_label in COMPARE_TABLE_ROWS:
+        cols = st.columns([1] + [1] * len(entries))
+        cols[0].markdown(f"**{field_label}**")
+        for index, row in enumerate(rows):
+            with cols[index + 1]:
+                _render_compare_cell(field_key, row[field_key])
+
+    if st.button("Clear comparison selection"):
+        clear_compare_selection()
+        st.rerun()
+
+
+def render_compare_sidebar_hint() -> None:
+    selected_count = count_selected_compare(st.session_state)
+    st.divider()
+    st.markdown("**Compare mode**")
+    st.caption(
+        f"{selected_count} selected · choose {MIN_COMPARE_LISTINGS}–"
+        f"{MAX_COMPARE_LISTINGS} listings"
+    )
+    if selected_count > MAX_COMPARE_LISTINGS:
+        st.warning(
+            f"Too many listings selected. Compare at most {MAX_COMPARE_LISTINGS}."
+        )
 
 
 def main() -> None:
@@ -226,6 +347,7 @@ def main() -> None:
 
         st.divider()
         pipeline_clicked = st.button("Refresh recommendations", type="primary")
+        render_compare_sidebar_hint()
 
     buyer = apply_buyer_overrides(
         base_buyer,
@@ -253,8 +375,17 @@ def main() -> None:
             payload = run_pipeline(selected_id, buyer, listings)
         st.session_state["ranked_payload"] = payload
         st.session_state["prefs_key"] = prefs_key
+        st.session_state["compare_catalog"] = build_compare_catalog(
+            payload["ranked"],
+            raw_lookup,
+        )
 
     payload = st.session_state["ranked_payload"]
+    catalog = st.session_state.get("compare_catalog") or build_compare_catalog(
+        payload["ranked"],
+        raw_lookup,
+    )
+    selected_count = count_selected_compare(st.session_state)
 
     ranked = payload["ranked"]
     pipeline = ranked["pipeline"]
@@ -265,7 +396,11 @@ def main() -> None:
     )
 
     for group in ranked["groups"]:
-        render_vehicle_section(group, raw_lookup)
+        render_vehicle_section(
+            group,
+            raw_lookup,
+            selected_count=selected_count,
+        )
 
     unmatched = ranked.get("unmatched_listings") or []
     if unmatched:
@@ -273,10 +408,14 @@ def main() -> None:
         st.subheader("Unmatched listings")
         pseudo_group = {
             "make": "Other",
-            "model": "models",
+            "model": "Unmatched",
             "listings": unmatched,
         }
-        render_vehicle_section(pseudo_group, raw_lookup)
+        render_vehicle_section(
+            pseudo_group,
+            raw_lookup,
+            selected_count=selected_count,
+        )
 
     invalid = ranked.get("invalid_listings") or []
     if invalid:
@@ -286,7 +425,7 @@ def main() -> None:
                 for warning in entry.get("warnings", []):
                     st.markdown(f"- {warning}")
 
-    render_compare_tray()
+    render_compare_mode(catalog)
 
 
 main()
