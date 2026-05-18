@@ -7,6 +7,14 @@ from src.listings.listing_normalizer import normalize_listing
 
 COVERAGE_MESSAGE_NO_LISTINGS = "No matching listings found"
 
+_FIT_LABEL_STRENGTH = {
+    "Strong fit": 0,
+    "Moderate fit": 1,
+    "Weak fit": 2,
+}
+
+_MISSING_NUMERIC_TIE_BREAK = 2**31 - 1
+
 
 def _model_key(make: str, model: str) -> tuple[str, str]:
     return make.strip().casefold(), model.strip().casefold()
@@ -43,10 +51,41 @@ def _recommendation_lookup(
     return lookup
 
 
+def _tie_break_price(listing: dict[str, Any]) -> int:
+    price = listing.get("price")
+    if price is None:
+        return _MISSING_NUMERIC_TIE_BREAK
+    return int(price)
+
+
+def _tie_break_mileage(listing: dict[str, Any]) -> int:
+    mileage = listing.get("mileage")
+    if mileage is None:
+        return _MISSING_NUMERIC_TIE_BREAK
+    return int(mileage)
+
+
+def _listing_sort_key(
+    listing_name: str,
+    listing: dict[str, Any],
+    fit: dict[str, Any],
+) -> tuple[Any, ...]:
+    return (
+        -fit["fit_score"],
+        _FIT_LABEL_STRENGTH.get(fit["fit_label"], len(_FIT_LABEL_STRENGTH)),
+        len(fit["warnings"]),
+        _tie_break_price(listing),
+        _tie_break_mileage(listing),
+        listing_name.casefold(),
+    )
+
+
 def _sort_scored_listings(
     entries: list[tuple[int, str, dict[str, Any], dict[str, Any]]],
 ) -> list[dict[str, Any]]:
-    entries.sort(key=lambda item: (-item[3]["fit_score"], item[0]))
+    entries.sort(
+        key=lambda item: _listing_sort_key(item[1], item[2], item[3]),
+    )
     return [
         {
             "listing_name": listing_name,

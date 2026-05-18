@@ -3,6 +3,7 @@ from typing import Any
 
 import pytest
 
+from src.listings.listing_fit import score_listing_fit
 from src.listings.listing_ranker import (
     COVERAGE_MESSAGE_NO_LISTINGS,
     rank_listings_by_recommendation,
@@ -202,6 +203,147 @@ def test_malformed_listing_does_not_crash_ranker():
 
     assert ranked["groups"]
     assert ranked["invalid_listings"]
+
+
+def _corolla_recommendation() -> dict[str, Any]:
+    return next(
+        item
+        for item in recommend("student")["recommendations"]
+        if item["model"] == "Corolla"
+    )
+
+
+def _rank_toyota_listings(
+    listings: list[tuple[str, dict[str, Any]]],
+) -> list[str]:
+    recommendation = _corolla_recommendation()
+    buyer = _buyer("student")
+    ranked = rank_listings_by_recommendation(
+        listings, [recommendation], buyer
+    )
+    group = _group_by_model(ranked, "Corolla")
+    assert group is not None
+    return _listing_names(group)
+
+
+def test_equal_fit_score_fewer_warnings_ranks_higher():
+    base = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 10500,
+        "clean_title": True,
+        "trim": "LE",
+    }
+    warning_heavy = {
+        **base,
+        "trim": "Unknown",
+    }
+    recommendation = _corolla_recommendation()
+    buyer = _buyer("student")
+    clean_fit = score_listing_fit(base, recommendation, buyer)
+    heavy_fit = score_listing_fit(warning_heavy, recommendation, buyer)
+
+    assert clean_fit["fit_score"] == heavy_fit["fit_score"]
+    assert len(heavy_fit["warnings"]) > len(clean_fit["warnings"])
+
+    order = _rank_toyota_listings(
+        [
+            ("warning_heavy", warning_heavy),
+            ("clean_listing", base),
+        ]
+    )
+    assert order.index("clean_listing") < order.index("warning_heavy")
+
+
+def test_equal_fit_score_lower_mileage_ranks_higher():
+    listing_low = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 60000,
+        "price": 10500,
+        "clean_title": True,
+        "trim": "LE",
+    }
+    listing_high = {**listing_low, "mileage": 95000}
+    recommendation = _corolla_recommendation()
+    buyer = _buyer("student")
+    low_fit = score_listing_fit(listing_low, recommendation, buyer)
+    high_fit = score_listing_fit(listing_high, recommendation, buyer)
+
+    assert low_fit["fit_score"] == high_fit["fit_score"]
+
+    order = _rank_toyota_listings(
+        [
+            ("high_mileage", listing_high),
+            ("low_mileage", listing_low),
+        ]
+    )
+    assert order.index("low_mileage") < order.index("high_mileage")
+
+
+def test_equal_fit_score_lower_price_ranks_higher():
+    listing_cheap = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 9000,
+        "clean_title": True,
+        "trim": "LE",
+    }
+    listing_dear = {**listing_cheap, "price": 11000}
+    recommendation = _corolla_recommendation()
+    buyer = _buyer("student")
+    cheap_fit = score_listing_fit(listing_cheap, recommendation, buyer)
+    dear_fit = score_listing_fit(listing_dear, recommendation, buyer)
+
+    assert cheap_fit["fit_score"] == dear_fit["fit_score"]
+    assert cheap_fit["fit_label"] == dear_fit["fit_label"]
+    assert len(cheap_fit["warnings"]) == len(dear_fit["warnings"])
+
+    order = _rank_toyota_listings(
+        [
+            ("dear_listing", listing_dear),
+            ("cheap_listing", listing_cheap),
+        ]
+    )
+    assert order.index("cheap_listing") < order.index("dear_listing")
+
+
+def test_ranking_order_is_deterministic_regardless_of_input_order():
+    listings = [
+        (
+            "zebra",
+            {
+                "make": "Toyota",
+                "model": "Corolla",
+                "year": 2016,
+                "mileage": 85000,
+                "price": 10500,
+                "clean_title": True,
+                "trim": "LE",
+            },
+        ),
+        (
+            "alpha",
+            {
+                "make": "Toyota",
+                "model": "Corolla",
+                "year": 2016,
+                "mileage": 85000,
+                "price": 10500,
+                "clean_title": True,
+                "trim": "LE",
+            },
+        ),
+    ]
+    forward = _rank_toyota_listings(listings)
+    reverse = _rank_toyota_listings(list(reversed(listings)))
+
+    assert forward == reverse == ["alpha", "zebra"]
 
 
 def test_malformed_listing_appears_in_invalid_listings():
