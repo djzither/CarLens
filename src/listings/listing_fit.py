@@ -60,6 +60,7 @@ def _cap_fit_label(
     has_year_range: bool,
     awd_requirement_met: bool = True,
     extreme_over_budget: bool = False,
+    over_mileage_limit: bool = False,
     severe_over_mileage: bool = False,
 ) -> str:
     if not model_matches:
@@ -72,6 +73,8 @@ def _cap_fit_label(
         if has_year_range and not year_in_range:
             return "Moderate fit"
         if not awd_requirement_met:
+            return "Moderate fit"
+        if over_mileage_limit:
             return "Moderate fit"
         if severe_over_mileage:
             return "Moderate fit"
@@ -203,6 +206,7 @@ def score_listing_fit(
         warnings.append(MISSING_PRICE_WARNING)
 
     max_mileage = buyer.get("max_mileage")
+    over_mileage_limit = False
     severe_over_mileage = False
     if max_mileage is not None:
         max_possible += MILEAGE_OK_POINTS
@@ -215,6 +219,7 @@ def score_listing_fit(
                         f"{max_mileage:,} mile limit"
                     )
             else:
+                over_mileage_limit = True
                 warnings.append(
                     f"Mileage {normalized['mileage']:,} exceeds your "
                     f"{max_mileage:,} mile limit"
@@ -266,6 +271,7 @@ def score_listing_fit(
         has_year_range=has_year_range,
         awd_requirement_met=awd_requirement_met,
         extreme_over_budget=extreme_over_budget,
+        over_mileage_limit=over_mileage_limit,
         severe_over_mileage=severe_over_mileage,
     )
 
