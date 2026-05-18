@@ -17,11 +17,20 @@ def _find_buyer(profiles: list[dict[str, Any]], buyer_profile_id: str) -> dict[s
     raise ValueError(f"buyer profile not found: {buyer_profile_id}")
 
 
-def recommend(buyer_profile_id: str) -> dict[str, Any]:
+def recommend(
+    buyer_profile_id: str,
+    *,
+    buyer: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     buyer_data = load_buyer_profiles()
     vehicle_data = load_vehicle_profiles()
 
-    buyer = _find_buyer(buyer_data["profiles"], buyer_profile_id)
+    if buyer is None:
+        buyer = _find_buyer(buyer_data["profiles"], buyer_profile_id)
+    elif buyer.get("id") != buyer_profile_id:
+        raise ValueError(
+            f"buyer.id {buyer.get('id')!r} does not match buyer_profile_id {buyer_profile_id!r}"
+        )
     vehicles = vehicle_data["vehicles"]
 
     recommendations: list[dict[str, Any]] = []
