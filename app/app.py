@@ -9,6 +9,15 @@ from typing import Any
 
 import streamlit as st
 
+from app.listing_display import (
+    build_ranking_explanation_lines,
+    build_watchouts,
+    format_listing_facts,
+    format_recommended_because,
+    format_score_caption,
+    qualifies_as_top_pick,
+    top_pick_banner_text,
+)
 from src.listings.listing_compare import (
     COMPARE_TABLE_ROWS,
     MAX_COMPARE_LISTINGS,
@@ -149,12 +158,14 @@ def _fit_badge_color(fit_label: str) -> str:
     return "#b3261e"
 
 
-def render_listing_card(
+def render_listing_summary(
     entry: dict[str, Any],
     *,
+    rank: int,
     compare_id: str,
     selected_count: int,
 ) -> None:
+    """Always-visible listing summary; details live in an expander."""
     listing = entry["listing"]
     fit = entry["fit"]
     confidence = entry["confidence"]
@@ -163,15 +174,14 @@ def render_listing_card(
     is_selected = bool(st.session_state.get(checkbox_key))
     at_limit = selected_count >= MAX_COMPARE_LISTINGS and not is_selected
 
-    header_cols = st.columns([5, 1])
+    header_cols = st.columns([6, 1])
     with header_cols[0]:
         st.markdown(
-            f"**{entry['listing_name']}** · "
+            f"**{rank}. {entry['listing_name']}** — "
             f"<span style='color:{_fit_badge_color(fit['fit_label'])}'>"
-            f"{fit['fit_label']}</span> · "
-            f"Score **{fit['fit_score']:.3f}** · "
+            f"{fit['fit_label']}</span> — "
             f"<span style='color:{_CONFIDENCE_COLORS[level]}'>"
-            f"Confidence: {level}</span>",
+            f"{level} confidence</span>",
             unsafe_allow_html=True,
         )
     with header_cols[1]:
@@ -186,21 +196,36 @@ def render_listing_card(
             ),
         )
 
-    if fit.get("warnings"):
-        warning_html = " ".join(
-            f"<span style='background:#fff3cd;color:#664d03;padding:2px 8px;"
-            f"border-radius:4px;margin-right:4px'>{warning}</span>"
-            for warning in fit["warnings"]
-        )
-        st.markdown(warning_html, unsafe_allow_html=True)
+    st.markdown(format_listing_facts(listing))
+    st.caption(format_score_caption(fit))
 
-    reason_cols = st.columns(2)
-    with reason_cols[0]:
-        st.markdown("**Positive reasons**")
-        for reason in fit.get("positive_reasons") or ["(none)"]:
+    st.markdown("**Why it ranks well:**")
+    positives = fit.get("positive_reasons") or []
+    if positives:
+        for reason in positives:
             st.markdown(f"- {reason}")
-    with reason_cols[1]:
-        st.markdown("**Negative reasons**")
+    else:
+        st.markdown("- None")
+
+    st.markdown("**Watchouts:**")
+    watchouts = build_watchouts(fit)
+    if watchouts:
+        for item in watchouts:
+            st.markdown(f"- {item}")
+    else:
+        st.markdown("- None")
+
+    with st.expander("Listing details & debug"):
+        if fit.get("warnings"):
+            st.markdown("**Warnings**")
+            for warning in fit["warnings"]:
+                st.markdown(f"- {warning}")
+
+        st.markdown("**Scoring reasons**")
+        for reason in fit.get("reasons") or ["(none)"]:
+            st.markdown(f"- {reason}")
+
+        st.markdown("**Negative reasons (structured)**")
         negatives = fit.get("negative_reasons") or []
         if negatives:
             for reason in negatives:
@@ -208,11 +233,18 @@ def render_listing_card(
         else:
             st.markdown("- (none)")
 
-    url = listing.get("listing_url")
-    if url:
-        st.markdown(f"[View listing source]({url})")
-    elif listing.get("source"):
-        st.caption(f"Source: {listing['source']}")
+        if fit.get("label_was_capped"):
+            st.caption("Fit label was capped below the raw score band.")
+
+        st.markdown("**Confidence assessment**")
+        for key, value in confidence.items():
+            st.markdown(f"- {key}: {value}")
+
+        url = listing.get("listing_url")
+        if url:
+            st.markdown(f"[View listing source]({url})")
+        elif listing.get("source"):
+            st.caption(f"Source: {listing['source']}")
 
 
 def render_vehicle_section(
@@ -223,22 +255,44 @@ def render_vehicle_section(
 ) -> None:
     make = group["make"]
     model = group["model"]
-    st.subheader(f"{make} {model}")
+    recommendation = group.get("recommendation") or {}
+
+    st.markdown(f"## {make} {model}")
+    st.markdown(
+        f"**Recommended because:** {format_recommended_because(recommendation)}"
+    )
     rec_score = group.get("recommendation_score")
     if rec_score is not None:
-        st.caption(f"Model recommendation score: {rec_score:.3f}")
+        st.caption(f"Model recommendation score: {rec_score:.3f} (model-level)")
 
     listings = group.get("listings") or []
     if not listings:
         st.info(group.get("coverage_message", "No matching listings found"))
         return
 
-    for entry in listings:
+    enriched_listings = [
+        _enrich_entry(entry, raw_listings) for entry in listings
+    ]
+    first_entry = enriched_listings[0]
+    if qualifies_as_top_pick(first_entry):
+        st.markdown(
+            "<span style='background:#1b7f3a;color:white;padding:4px 10px;"
+            "border-radius:6px;font-weight:600'>Top pick</span>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(f"*{top_pick_banner_text(first_entry)}*")
+
+    st.markdown("**Why this ranking?**")
+    for line in build_ranking_explanation_lines():
+        st.markdown(f"- {line}")
+
+    for rank, entry in enumerate(enriched_listings, start=1):
         compare_id = make_compare_id(make, model, entry["listing_name"])
-        enriched = _enrich_entry(entry, raw_listings)
         with st.container(border=True):
-            render_listing_card(
-                enriched,
+            render_listing_summary(
+                entry,
+                rank=rank,
                 compare_id=compare_id,
                 selected_count=selected_count,
             )
