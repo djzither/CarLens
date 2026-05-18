@@ -210,27 +210,26 @@ def score_listing_fit(
     severe_over_mileage = False
     if max_mileage is not None:
         max_possible += MILEAGE_OK_POINTS
-        if "mileage" in normalized:
-            if normalized["mileage"] <= max_mileage:
-                score += MILEAGE_OK_POINTS
-                if model_matches:
-                    reasons.append(
-                        f"Mileage {normalized['mileage']:,} is within your "
-                        f"{max_mileage:,} mile limit"
-                    )
-            else:
-                over_mileage_limit = True
-                warnings.append(
-                    f"Mileage {normalized['mileage']:,} exceeds your "
+        if "mileage" not in normalized:
+            warnings.append(MISSING_MILEAGE_WARNING)
+        elif normalized["mileage"] <= max_mileage:
+            score += MILEAGE_OK_POINTS
+            if model_matches:
+                reasons.append(
+                    f"Mileage {normalized['mileage']:,} is within your "
                     f"{max_mileage:,} mile limit"
                 )
-                if (
-                    normalized["mileage"]
-                    > max_mileage * SEVERE_OVER_MILEAGE_MULTIPLIER
-                ):
-                    severe_over_mileage = True
         else:
-            warnings.append(MISSING_MILEAGE_WARNING)
+            over_mileage_limit = True
+            warnings.append(
+                f"Mileage {normalized['mileage']:,} exceeds your "
+                f"{max_mileage:,} mile limit"
+            )
+            if (
+                normalized["mileage"]
+                > max_mileage * SEVERE_OVER_MILEAGE_MULTIPLIER
+            ):
+                severe_over_mileage = True
 
     _append_trim_warnings(normalized, recommendation, warnings)
 

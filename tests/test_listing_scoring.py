@@ -245,7 +245,7 @@ def _clean_corolla_listing(**overrides) -> dict:
     return listing
 
 
-def test_missing_mileage_scores_lower_than_clean_mileage():
+def test_missing_mileage_scores_below_disclosed_good_mileage():
     recommendation = _corolla_recommendation()
     buyer = _buyer("student")
     disclosed = score_listing_fit(_clean_corolla_listing(), recommendation, buyer)
@@ -253,7 +253,10 @@ def test_missing_mileage_scores_lower_than_clean_mileage():
     del missing_listing["mileage"]
     missing = score_listing_fit(missing_listing, recommendation, buyer)
 
+    assert MISSING_MILEAGE_WARNING in missing["warnings"]
     assert missing["fit_score"] < disclosed["fit_score"]
+    assert any("mileage" in reason.lower() for reason in disclosed["reasons"])
+    assert not any("mileage" in reason.lower() for reason in missing["reasons"])
 
 
 def test_missing_mileage_produces_warning():
