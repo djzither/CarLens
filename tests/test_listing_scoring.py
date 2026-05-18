@@ -314,7 +314,15 @@ def test_out_of_range_year_is_not_strong_fit():
     assert any("outside the recommended" in warning for warning in result["warnings"])
 
 
-def test_over_mileage_cannot_be_strong_fit():
+def test_slight_mileage_overrun_is_not_strong_fit():
+    listing = _clean_corolla_listing(mileage=131000)
+    result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
+
+    assert result["fit_label"] != "Strong fit"
+    assert any("exceeds" in warning.lower() for warning in result["warnings"])
+
+
+def test_moderate_mileage_overrun_is_not_strong_fit():
     listing = _clean_corolla_listing(mileage=140000)
     result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
 
