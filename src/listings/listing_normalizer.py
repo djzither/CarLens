@@ -13,6 +13,10 @@ _CLEAN_TITLE_KEYWORDS = (
     "clean carfax",
     "clear title",
 )
+_NEGATED_CLEAN_TITLE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b(?:not|no)\s+clean\s+title\b", re.IGNORECASE),
+    re.compile(r"\bclean\s+title\s*[:\-]?\s*(?:no|not)\b", re.IGNORECASE),
+)
 
 # Title-status phrases only; avoid false positives such as "flood lights" or "lemon yellow".
 _DIRTY_TITLE_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -29,6 +33,13 @@ _DIRTY_TITLE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\btitle\s*:\s*lemon\b", re.IGNORECASE),
     re.compile(r"\bbranded\s+title\b", re.IGNORECASE),
     re.compile(r"\bjunk\s+title\b", re.IGNORECASE),
+)
+_NEGATED_DIRTY_TITLE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bno\s+salvage\s+(?:title|history)\b", re.IGNORECASE),
+    re.compile(r"\bnot\s+salvage(?:\s+title)?\b", re.IGNORECASE),
+    re.compile(r"\bno\s+flood\s+damage\b", re.IGNORECASE),
+    re.compile(r"\bno\s+lemon\s+law\b", re.IGNORECASE),
+    re.compile(r"\bno\s+branded\s+title\b", re.IGNORECASE),
 )
 
 _MODEL_TRIMS: dict[tuple[str, str], frozenset[str]] = {
@@ -261,6 +272,8 @@ def extract_trim(title: str, make: str, model: str) -> str | None:
 
 
 def _has_dirty_title_signal(text: str) -> bool:
+    if any(pattern.search(text) for pattern in _NEGATED_DIRTY_TITLE_PATTERNS):
+        return False
     return any(pattern.search(text) for pattern in _DIRTY_TITLE_PATTERNS)
 
 
@@ -275,6 +288,9 @@ def detect_clean_title(title: str | None, description: str | None) -> bool | Non
         return None
 
     if _has_dirty_title_signal(combined):
+        return False
+
+    if any(pattern.search(combined) for pattern in _NEGATED_CLEAN_TITLE_PATTERNS):
         return False
 
     combined_lower = combined.casefold()

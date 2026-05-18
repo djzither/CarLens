@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 _PRICE_TOLERANCE_DOLLARS = 500
 _PRICE_TOLERANCE_RATIO = 0.02
@@ -26,7 +27,22 @@ def _norm_url(value: Any) -> str | None:
     text = _norm_text(value)
     if not text:
         return None
-    return text.rstrip("/").casefold()
+    parsed = urlsplit(text.strip())
+    filtered_qs = [
+        (key, val)
+        for key, val in parse_qsl(parsed.query, keep_blank_values=True)
+        if key.casefold() not in {"fbclid", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"}
+    ]
+    normalized = urlunsplit(
+        (
+            parsed.scheme.casefold(),
+            parsed.netloc.casefold(),
+            parsed.path.rstrip("/"),
+            "&".join(f"{key}={val}" for key, val in filtered_qs),
+            "",
+        )
+    )
+    return normalized.casefold()
 
 
 def _listing_title(listing: dict[str, Any]) -> str | None:

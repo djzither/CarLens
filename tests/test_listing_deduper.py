@@ -119,3 +119,19 @@ def test_keep_most_complete_record():
     assert len(result) == 1
     assert result[0] is complete
     assert len(result[0]["raw_title"]) > len("Corolla")
+
+
+def test_duplicate_url_ignores_tracking_query_params():
+    first = _corolla_base(
+        listing_url="https://facebook.com/marketplace/item/123?fbclid=abc&utm_source=feed",
+        price=None,
+        mileage=None,
+        clean_title=None,
+    )
+    second = _corolla_base(
+        listing_url="https://facebook.com/marketplace/item/123",
+    )
+
+    result = dedupe_listings([first, second])
+
+    assert len(result) == 1

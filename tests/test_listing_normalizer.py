@@ -130,6 +130,15 @@ def test_detect_clean_title_rebuilt_engine_with_clean_title():
 def test_detect_clean_title_no_salvage_history_not_dirty():
     assert detect_clean_title("No salvage history on this car", None) is None
 
+def test_detect_clean_title_not_clean_title_is_dirty():
+    assert detect_clean_title("not clean title", None) is False
+
+def test_detect_clean_title_clean_title_no_is_dirty():
+    assert detect_clean_title("clean title: no", None) is False
+
+def test_detect_clean_title_no_flood_damage_not_dirty():
+    assert detect_clean_title("no flood damage, clean carfax", None) is True
+
 def test_detect_clean_title_empty_inputs_return_none():
     assert detect_clean_title(None, None) is None
 

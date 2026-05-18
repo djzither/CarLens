@@ -59,6 +59,15 @@ def title_has_ambiguous_mileage(title: str | None) -> bool:
     return len(set(candidates)) > 1
 
 
+def _title_mileage(title: str | None) -> int | None:
+    if not title or not title.strip():
+        return None
+    candidates = list(set(_mileage_candidates_from_text(title)))
+    if len(candidates) != 1:
+        return None
+    return candidates[0]
+
+
 def detect_inferred_fields(
     raw_listing: dict[str, Any],
     normalized: dict[str, Any],
@@ -153,6 +162,13 @@ def assess_listing_confidence(
     inferred_fields = detect_inferred_fields(raw_listing, normalized)
     missing_fields = _missing_core_fields(normalized)
     title = _listing_title(raw_listing)
+    title_mileage = _title_mileage(title)
+    normalized_mileage = normalized.get("mileage")
+    mileage_conflict_detected = (
+        title_mileage is not None
+        and normalized_mileage is not None
+        and int(title_mileage) != int(normalized_mileage)
+    )
     ambiguity_detected = title_has_ambiguous_mileage(title)
     conflicting_signals = _has_conflicting_signals(fit)
     warning_count = len(fit.get("warnings", []))
@@ -162,6 +178,7 @@ def assess_listing_confidence(
     low = (
         fit.get("fit_label") == "Weak fit"
         or ambiguity_detected
+        or mileage_conflict_detected
         or len(inferred_fields) >= 2
         or core_present < 2
         or conflicting_signals
@@ -185,5 +202,6 @@ def assess_listing_confidence(
         "inferred_fields": inferred_fields,
         "missing_fields": missing_fields,
         "ambiguity_detected": ambiguity_detected,
+        "mileage_conflict_detected": mileage_conflict_detected,
         "conflicting_signals": conflicting_signals,
     }

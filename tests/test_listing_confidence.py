@@ -197,3 +197,25 @@ def test_stacked_violations_cannot_be_high_confidence(
     assert "Dirty title" in fit["negative_reasons"]
     assert any("Over budget" in reason for reason in fit["negative_reasons"])
     assert any("Mileage exceeds" in reason for reason in fit["negative_reasons"])
+
+
+def test_low_confidence_when_title_and_field_mileage_conflict(
+    student_buyer: dict,
+    student_corolla_recommendation: dict,
+):
+    raw = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85_000,
+        "title": "2016 Toyota Corolla LE 185k miles clean title",
+        "price": 10_500,
+        "clean_title": True,
+    }
+    normalized = normalize_listing(raw)
+    fit = score_listing_fit(raw, student_corolla_recommendation, student_buyer)
+
+    result = assess_listing_confidence(raw, normalized, fit=fit)
+
+    assert result["mileage_conflict_detected"] is True
+    assert result["confidence_level"] == "Low"
