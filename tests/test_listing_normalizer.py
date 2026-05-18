@@ -266,3 +266,115 @@ def test_normalize_listing_rejects_year_beyond_next_model_year():
                 "year": date.today().year + 2,
             }
         )
+
+
+def _normalize_corolla_title(title: str) -> dict:
+    return normalize_listing(
+        {
+            "make": "Toyota",
+            "model": "Corolla",
+            "year": 2016,
+            "title": title,
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    ("mileage",),
+    [
+        (2016,),
+        ("2016",),
+        ("2016k",),
+        (600_000,),
+    ],
+)
+def test_normalize_listing_drops_implausible_stored_mileage(mileage):
+    result = normalize_listing(
+        {
+            "make": "Toyota",
+            "model": "Corolla",
+            "year": 2016,
+            "mileage": mileage,
+        }
+    )
+
+    assert "mileage" not in result
+
+
+@pytest.mark.parametrize(
+    ("mileage", "expected"),
+    [
+        (500, 500),
+        ("500", 500),
+        (250_000, 250_000),
+        ("250000", 250_000),
+    ],
+)
+def test_normalize_listing_keeps_plausible_stored_mileage(mileage, expected):
+    result = normalize_listing(
+        {
+            "make": "Toyota",
+            "model": "Corolla",
+            "year": 2016,
+            "mileage": mileage,
+        }
+    )
+
+    assert result["mileage"] == expected
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "brakes done 20000 miles ago",
+        "50k miles ago oil was changed",
+        "oil change every 5000 miles",
+    ],
+)
+def test_normalize_listing_ignores_service_history_mileage_in_title(title):
+    result = _normalize_corolla_title(title)
+
+    assert "mileage" not in result
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "new engine at 100k, now at 45k",
+        "Engine has 50k, car has 85,000 miles",
+    ],
+)
+def test_normalize_listing_ignores_ambiguous_multiple_mileage_in_title(title):
+    result = _normalize_corolla_title(title)
+
+    assert "mileage" not in result
+
+
+def test_normalize_listing_extracts_single_mileage_from_title():
+    result = _normalize_corolla_title("Toyota Corolla 85k miles")
+
+    assert result["mileage"] == 85_000
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Price cut 2022! 2016 Toyota Corolla",
+        "Updated 2023: 2016 Toyota Corolla",
+        "2016 Toyota Corolla LE",
+    ],
+)
+def test_extract_year_make_model_prefers_vehicle_year_near_make(title):
+    extracted = extract_year_make_model(title)
+
+    assert extracted["year"] == 2016
+    assert extracted["make"] == "Toyota"
+    assert extracted["model"] == "Corolla"
+
+
+def test_normalize_listing_uses_vehicle_year_not_leading_context_year():
+    result = normalize_listing({"title": "Price cut 2022! 2016 Toyota Corolla"})
+
+    assert result["year"] == 2016
+    assert result["make"] == "Toyota"
+    assert result["model"] == "Corolla"

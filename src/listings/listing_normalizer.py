@@ -46,6 +46,9 @@ _MILEAGE_MILES_IN_TEXT_RE = re.compile(
 
 _MIN_LISTING_YEAR = 1980
 _MIN_PLAUSIBLE_MILEAGE = 100
+_MAX_PLAUSIBLE_MILEAGE = 500_000
+
+_SERVICE_MILEAGE_TAIL_RE = re.compile(r"\s*ago\b", re.IGNORECASE)
 
 
 def parse_price(value: Any) -> int | None:
@@ -151,10 +154,42 @@ def _validate_year(year: int) -> int:
     return year
 
 
+def _looks_like_vehicle_year(value: int) -> bool:
+    return _MIN_LISTING_YEAR <= value <= _max_allowed_year()
+
+
 def _mileage_for_normalized_listing(parsed: int | None) -> int | None:
-    if parsed is None or parsed < _MIN_PLAUSIBLE_MILEAGE:
+    if parsed is None:
+        return None
+    if parsed < _MIN_PLAUSIBLE_MILEAGE or parsed > _MAX_PLAUSIBLE_MILEAGE:
+        return None
+    if _looks_like_vehicle_year(parsed):
         return None
     return parsed
+
+
+def _is_service_history_mileage_match(text: str, match: re.Match[str]) -> bool:
+    start, end = match.span()
+    tail = text[end : end + 16]
+    before = text[max(0, start - 40) : start].casefold()
+
+    if _SERVICE_MILEAGE_TAIL_RE.match(tail):
+        return True
+    if re.search(r"\bevery\s*$", before.rstrip()) or before.rstrip().endswith("every"):
+        return True
+    return False
+
+
+def _mileage_candidates_from_text(text: str) -> list[int]:
+    candidates: list[int] = []
+    for pattern in (_MILEAGE_K_IN_TEXT_RE, _MILEAGE_MILES_IN_TEXT_RE):
+        for match in pattern.finditer(text):
+            if _is_service_history_mileage_match(text, match):
+                continue
+            parsed = parse_mileage(match.group(0))
+            if parsed is not None:
+                candidates.append(parsed)
+    return candidates
 
 
 def extract_year_make_model(title: str) -> dict[str, int | str | None]:
@@ -163,33 +198,40 @@ def extract_year_make_model(title: str) -> dict[str, int | str | None]:
         return {"year": None, "make": None, "model": None}
 
     text = str(title).strip()
-    year: int | None = None
-
-    leading_year = re.match(r"^\s*((?:19|20)\d{2})\b", text)
-    if leading_year:
-        year = int(leading_year.group(1))
-        text = text[leading_year.end() :].strip()
-    else:
-        embedded_year = re.search(r"\b((?:19|20)\d{2})\b", text)
-        if embedded_year:
-            year = int(embedded_year.group(1))
-
     title_lower = text.casefold()
     best_make: str | None = None
     best_model: str | None = None
     best_model_len = 0
+    make_pos = -1
 
     for make, model in _known_vehicles():
         make_lower = make.casefold()
         model_lower = model.casefold()
-        make_pos = title_lower.find(make_lower)
+        found_make_pos = title_lower.find(make_lower)
         model_pos = title_lower.find(model_lower)
-        if make_pos == -1 or model_pos == -1 or model_pos <= make_pos:
+        if found_make_pos == -1 or model_pos == -1 or model_pos <= found_make_pos:
             continue
         if len(model_lower) > best_model_len:
             best_make = make
             best_model = model
             best_model_len = len(model_lower)
+            make_pos = found_make_pos
+
+    year: int | None = None
+    if make_pos >= 0:
+        prefix = text[:make_pos]
+        year_matches = list(re.finditer(r"\b((?:19|20)\d{2})\b", prefix))
+        if year_matches:
+            year = int(year_matches[-1].group(1))
+
+    if year is None:
+        leading_year = re.match(r"^\s*((?:19|20)\d{2})\b", text)
+        if leading_year:
+            year = int(leading_year.group(1))
+        else:
+            embedded_year = re.search(r"\b((?:19|20)\d{2})\b", text)
+            if embedded_year:
+                year = int(embedded_year.group(1))
 
     return {"year": year, "make": best_make, "model": best_model}
 
@@ -268,12 +310,13 @@ def _coerce_bool(value: Any) -> bool:
 
 
 def _mileage_from_text(text: str) -> int | None:
-    for pattern in (_MILEAGE_K_IN_TEXT_RE, _MILEAGE_MILES_IN_TEXT_RE):
-        for match in pattern.finditer(text):
-            parsed = parse_mileage(match.group(0))
-            if parsed is not None:
-                return parsed
-    return None
+    candidates = _mileage_candidates_from_text(text)
+    if not candidates:
+        return None
+    distinct = set(candidates)
+    if len(distinct) > 1:
+        return None
+    return candidates[0]
 
 
 def _resolved_title(raw: dict[str, Any]) -> str | None:
