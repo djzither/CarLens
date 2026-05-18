@@ -9,7 +9,7 @@ from typing import Any
 
 import streamlit as st
 
-from app.listing_display import (
+from listing_display import (
     build_ranking_explanation_lines,
     build_watchouts,
     format_listing_facts,
