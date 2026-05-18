@@ -264,17 +264,23 @@ def test_missing_mileage_produces_warning():
     assert MISSING_MILEAGE_WARNING in result["warnings"]
 
 
-def test_missing_title_produces_warning():
+def test_missing_title_emits_warning():
     listing = _clean_corolla_listing()
     del listing["clean_title"]
     result = score_listing_fit(listing, _corolla_recommendation(), _buyer("student"))
 
     assert MISSING_TITLE_WARNING in result["warnings"]
+    assert result["fit_label"] != "Strong fit"
 
 
 def test_missing_title_does_not_score_higher_than_dirty_title():
     recommendation = _corolla_recommendation()
     buyer = _buyer("student")
+    confirmed_clean = score_listing_fit(
+        _clean_corolla_listing(),
+        recommendation,
+        buyer,
+    )
     undisclosed_listing = _clean_corolla_listing()
     del undisclosed_listing["clean_title"]
     undisclosed = score_listing_fit(undisclosed_listing, recommendation, buyer)
@@ -284,6 +290,7 @@ def test_missing_title_does_not_score_higher_than_dirty_title():
         buyer,
     )
 
+    assert undisclosed["fit_score"] < confirmed_clean["fit_score"]
     assert undisclosed["fit_score"] <= dirty["fit_score"]
 
 

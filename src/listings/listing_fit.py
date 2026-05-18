@@ -108,6 +108,13 @@ def _buyer_requires_awd(buyer: dict[str, Any]) -> bool:
     return "drive_type:awd" in buyer.get("hard_requirements", [])
 
 
+def _resolve_clean_title(normalized: dict[str, Any]) -> bool | None:
+    """Return True only when title is confirmed clean; False if dirty; else undisclosed."""
+    if "clean_title" not in normalized:
+        return None
+    return normalized["clean_title"]
+
+
 def _append_trim_warnings(
     normalized: dict[str, Any],
     recommendation: dict[str, Any],
@@ -236,11 +243,13 @@ def score_listing_fit(
         score -= BAD_YEAR_PENALTY
         warnings.append(f"{normalized['year']} is a known weak year for this model")
 
-    clean_title = normalized.get("clean_title")
-    if clean_title is False:
+    clean_title = _resolve_clean_title(normalized)
+    if clean_title is True:
+        pass
+    elif clean_title is False:
         score -= DIRTY_TITLE_PENALTY
         warnings.append(DIRTY_TITLE_WARNING)
-    elif clean_title is None:
+    else:
         score -= UNDISCLOSED_TITLE_PENALTY
         warnings.append(MISSING_TITLE_WARNING)
 
