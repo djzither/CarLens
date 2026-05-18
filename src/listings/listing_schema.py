@@ -4,7 +4,32 @@ from typing import Any
 
 LISTING_REQUIRED = frozenset({"make", "model", "year"})
 LISTING_OPTIONAL = frozenset(
-    {"price", "mileage", "clean_title", "location", "trim", "drive_type"}
+    {
+        "price",
+        "mileage",
+        "clean_title",
+        "location",
+        "trim",
+        "drive_type",
+        "listing_id",
+        "source",
+        "listing_url",
+        "raw_title",
+    }
+)
+CANONICAL_LISTING_FIELDS = (
+    "listing_id",
+    "make",
+    "model",
+    "year",
+    "price",
+    "mileage",
+    "trim",
+    "clean_title",
+    "drive_type",
+    "source",
+    "listing_url",
+    "raw_title",
 )
 
 
@@ -66,5 +91,13 @@ def validate_listing(listing: Any) -> dict[str, Any]:
         validated["trim"] = _require_str(data["trim"], "listing.trim")
     if "drive_type" in data:
         validated["drive_type"] = _require_str(data["drive_type"], "listing.drive_type")
+    if "listing_id" in data:
+        validated["listing_id"] = _require_str(data["listing_id"], "listing.listing_id")
+    if "source" in data:
+        validated["source"] = _require_str(data["source"], "listing.source")
+    if "listing_url" in data:
+        validated["listing_url"] = _require_str(data["listing_url"], "listing.listing_url")
+    if "raw_title" in data:
+        validated["raw_title"] = _require_str(data["raw_title"], "listing.raw_title")
 
     return validated
