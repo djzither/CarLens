@@ -7,19 +7,27 @@ from typing import Any
 from src.listings.listing_schema import validate_listing
 from src.vehicles.vehicle_profile_loader import load_vehicle_profiles
 
-_DIRTY_TITLE_KEYWORDS = (
-    "salvage",
-    "rebuilt",
-    "rebuild title",
-    "flood",
-    "lemon",
-    "branded title",
-    "junk title",
-)
 _CLEAN_TITLE_KEYWORDS = (
     "clean title",
     "clean carfax",
     "clear title",
+)
+
+# Title-status phrases only; avoid false positives such as "flood lights" or "lemon yellow".
+_DIRTY_TITLE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bsalvage\s+title\b", re.IGNORECASE),
+    re.compile(r"\btitle\s*:\s*salvage\b", re.IGNORECASE),
+    re.compile(r"\bsalvaged\s+(?:title|vehicle|car)\b", re.IGNORECASE),
+    re.compile(r"\brebuilt\s+title\b", re.IGNORECASE),
+    re.compile(r"\brebuild\s+title\b", re.IGNORECASE),
+    re.compile(r"\btitle\s*:\s*rebuilt\b", re.IGNORECASE),
+    re.compile(r"\bflood\s+(?:damage|title|car|vehicle)\b", re.IGNORECASE),
+    re.compile(r"\bflood[-\s]?damaged\b", re.IGNORECASE),
+    re.compile(r"\bflooded\b", re.IGNORECASE),
+    re.compile(r"\blemon\s+(?:law|title)\b", re.IGNORECASE),
+    re.compile(r"\btitle\s*:\s*lemon\b", re.IGNORECASE),
+    re.compile(r"\bbranded\s+title\b", re.IGNORECASE),
+    re.compile(r"\bjunk\s+title\b", re.IGNORECASE),
 )
 
 _MODEL_TRIMS: dict[tuple[str, str], frozenset[str]] = {
@@ -163,22 +171,26 @@ def extract_trim(title: str, make: str, model: str) -> str | None:
     return None
 
 
+def _has_dirty_title_signal(text: str) -> bool:
+    return any(pattern.search(text) for pattern in _DIRTY_TITLE_PATTERNS)
+
+
 def detect_clean_title(title: str | None, description: str | None) -> bool | None:
     """Infer title status from title and description text."""
     combined = " ".join(
         part.strip()
         for part in (title, description)
         if part and str(part).strip()
-    ).casefold()
+    )
     if not combined:
         return None
 
-    for keyword in _DIRTY_TITLE_KEYWORDS:
-        if keyword in combined:
-            return False
+    if _has_dirty_title_signal(combined):
+        return False
 
+    combined_lower = combined.casefold()
     for keyword in _CLEAN_TITLE_KEYWORDS:
-        if keyword in combined:
+        if keyword in combined_lower:
             return True
 
     return None
