@@ -313,6 +313,34 @@ def test_equal_fit_score_lower_price_ranks_higher():
     assert order.index("cheap_listing") < order.index("dear_listing")
 
 
+def test_missing_mileage_does_not_outrank_disclosed_over_limit():
+    in_budget_over_limit = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 140000,
+        "price": 10500,
+        "clean_title": True,
+        "trim": "LE",
+    }
+    missing_mileage = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "price": 10500,
+        "clean_title": True,
+        "trim": "LE",
+    }
+
+    order = _rank_toyota_listings(
+        [
+            ("missing_mileage", missing_mileage),
+            ("over_limit", in_budget_over_limit),
+        ]
+    )
+    assert order.index("over_limit") < order.index("missing_mileage")
+
+
 def test_missing_price_does_not_rank_above_clean_in_budget_listing():
     in_budget = {
         "make": "Toyota",

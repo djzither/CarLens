@@ -302,6 +302,52 @@ def test_missing_mileage_produces_warning():
     assert MISSING_MILEAGE_WARNING in result["warnings"]
 
 
+def test_missing_mileage_cannot_be_strong_fit():
+    missing_listing = _clean_corolla_listing()
+    del missing_listing["mileage"]
+    result = score_listing_fit(
+        missing_listing, _corolla_recommendation(), _buyer("student")
+    )
+
+    assert result["fit_label"] != "Strong fit"
+    assert result["label_was_capped"] is True
+
+
+def test_known_bad_year_cannot_be_strong_fit():
+    listing = {
+        "make": "Honda",
+        "model": "Civic",
+        "year": 2016,
+        "mileage": 80000,
+        "price": 10000,
+        "clean_title": True,
+    }
+    result = score_listing_fit(
+        listing, _civic_recommendation_with_bad_years(), _buyer("student")
+    )
+
+    assert result["fit_label"] != "Strong fit"
+    assert any("known weak year" in warning.lower() for warning in result["warnings"])
+
+
+def test_known_bad_year_gets_cap_regardless_of_other_scores():
+    listing = {
+        "make": "Honda",
+        "model": "Civic",
+        "year": 2016,
+        "mileage": 80000,
+        "price": 10000,
+        "clean_title": True,
+    }
+    result = score_listing_fit(
+        listing, _civic_recommendation_with_bad_years(), _buyer("student")
+    )
+
+    assert result["fit_score"] >= 0.75
+    assert result["fit_label"] == "Moderate fit"
+    assert result["label_was_capped"] is True
+
+
 def test_missing_title_emits_warning():
     listing = _clean_corolla_listing()
     del listing["clean_title"]

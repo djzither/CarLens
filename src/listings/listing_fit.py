@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.listings.listing_normalizer import normalize_listing
+from src.listings.listing_reasons import build_listing_reasons
 from src.vehicles.vehicle_profile_loader import load_vehicle_profiles
 
 MODEL_MATCH_POINTS = 40
@@ -62,8 +63,10 @@ def _cap_fit_label(
     awd_requirement_met: bool = True,
     severe_over_budget: bool = False,
     missing_price: bool = False,
+    missing_mileage: bool = False,
     over_mileage_limit: bool = False,
     severe_over_mileage: bool = False,
+    known_bad_year: bool = False,
 ) -> str:
     if not model_matches:
         return "Weak fit"
@@ -78,9 +81,13 @@ def _cap_fit_label(
             return "Moderate fit"
         if missing_price:
             return "Moderate fit"
+        if missing_mileage:
+            return "Moderate fit"
         if over_mileage_limit:
             return "Moderate fit"
         if severe_over_mileage:
+            return "Moderate fit"
+        if known_bad_year:
             return "Moderate fit"
     return label
 
@@ -216,11 +223,13 @@ def score_listing_fit(
             severe_over_budget = True
 
     max_mileage = buyer.get("max_mileage")
+    missing_mileage = False
     over_mileage_limit = False
     severe_over_mileage = False
     if max_mileage is not None:
         max_possible += MILEAGE_OK_POINTS
         if "mileage" not in normalized:
+            missing_mileage = True
             warnings.append(MISSING_MILEAGE_WARNING)
         elif normalized["mileage"] <= max_mileage:
             score += MILEAGE_OK_POINTS
@@ -253,7 +262,10 @@ def score_listing_fit(
             warnings.append(NOT_AWD_WARNING)
             awd_requirement_met = False
 
-    if normalized["year"] in _known_bad_years_for_recommendation(recommendation):
+    known_bad_year = normalized["year"] in _known_bad_years_for_recommendation(
+        recommendation
+    )
+    if known_bad_year:
         score -= BAD_YEAR_PENALTY
         warnings.append(f"{normalized['year']} is a known weak year for this model")
 
@@ -272,8 +284,9 @@ def score_listing_fit(
     else:
         normalized_score = max(0.0, min(1.0, score / max_possible))
 
+    raw_label = fit_label(normalized_score)
     label = _cap_fit_label(
-        fit_label(normalized_score),
+        raw_label,
         clean_title=clean_title,
         model_matches=model_matches,
         year_in_range=year_in_range,
@@ -281,13 +294,20 @@ def score_listing_fit(
         awd_requirement_met=awd_requirement_met,
         severe_over_budget=severe_over_budget,
         missing_price=missing_price,
+        missing_mileage=missing_mileage,
         over_mileage_limit=over_mileage_limit,
         severe_over_mileage=severe_over_mileage,
+        known_bad_year=known_bad_year,
     )
+
+    structured_reasons = build_listing_reasons(listing, buyer, recommendation)
 
     return {
         "fit_score": round(normalized_score, 3),
         "fit_label": label,
+        "label_was_capped": raw_label != label,
         "reasons": reasons,
         "warnings": warnings,
+        "positive_reasons": structured_reasons["positive_reasons"],
+        "negative_reasons": structured_reasons["negative_reasons"],
     }
