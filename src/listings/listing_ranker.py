@@ -33,11 +33,15 @@ def _listing_display_name(listing: dict[str, Any]) -> tuple[str, str]:
 
 def _unmatched_fit(listing: dict[str, Any]) -> dict[str, Any]:
     make, model = _listing_display_name(listing)
+    unmatched_warning = f"{make} {model} does not match any recommended model"
     return {
         "fit_score": 0.0,
         "fit_label": "Weak fit",
+        "label_was_capped": False,
         "reasons": [],
-        "warnings": [f"{make} {model} does not match any recommended model"],
+        "warnings": [unmatched_warning],
+        "positive_reasons": [],
+        "negative_reasons": [unmatched_warning],
     }
 
 

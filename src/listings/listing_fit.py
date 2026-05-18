@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 from src.listings.listing_normalizer import normalize_listing
-from src.listings.listing_reasons import build_listing_reasons
 from src.vehicles.vehicle_profile_loader import load_vehicle_profiles
 
 MODEL_MATCH_POINTS = 40
@@ -299,6 +298,8 @@ def score_listing_fit(
         severe_over_mileage=severe_over_mileage,
         known_bad_year=known_bad_year,
     )
+
+    from src.listings.listing_reasons import build_listing_reasons
 
     structured_reasons = build_listing_reasons(listing, buyer, recommendation)
 
