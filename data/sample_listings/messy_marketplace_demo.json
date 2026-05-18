@@ -1,0 +1,477 @@
+{
+  "schema_version": "1.0",
+  "buyer_profile_id": "student",
+  "description": "Messy marketplace demo — title-heavy posts, duplicates, sparse rows, and intentional outliers.",
+  "listings": [
+    {
+      "id": "messy_corolla_le_runs_great",
+      "listing": {
+        "title": "2016 Toyota Corolla LE clean title 92k miles runs great",
+        "price": "$10,200",
+        "listing_url": "https://demo.carlens.local/messy/corolla-le-92k-a",
+        "source": "facebook",
+        "listing_id": "fb-corolla-92k-a"
+      }
+    },
+    {
+      "id": "messy_corolla_dup_sparse",
+      "listing": {
+        "title": "2016 Toyota Corolla LE 92k miles",
+        "listing_url": "https://demo.carlens.local/messy/corolla-le-92k-a",
+        "source": "craigslist",
+        "listing_id": "cl-corolla-92k-a"
+      }
+    },
+    {
+      "id": "messy_corolla_dup_complete",
+      "listing": {
+        "title": "2016 Toyota Corolla LE clean title 92k miles",
+        "price": 10200,
+        "clean_title": true,
+        "trim": "LE",
+        "listing_url": "https://demo.carlens.local/messy/corolla-le-92k-a",
+        "source": "facebook",
+        "listing_id": "fb-corolla-92k-a"
+      }
+    },
+    {
+      "id": "sparse_2015_corolla_title",
+      "listing": {
+        "title": "2015 Toyota Corolla",
+        "listing_url": "https://demo.carlens.local/messy/sparse-2015-corolla"
+      }
+    },
+    {
+      "id": "sparse_corolla_obo",
+      "listing": {
+        "title": "2015 Toyota Corolla $8500 OBO",
+        "listing_url": "https://demo.carlens.local/messy/sparse-corolla-obo"
+      }
+    },
+    {
+      "id": "messy_corolla_contradictory_title",
+      "listing": {
+        "title": "2016 Toyota Corolla SE clean title",
+        "description": "clean title salvage rebuilt — runs great, must see",
+        "price": "$9,500",
+        "listing_url": "https://demo.carlens.local/messy/corolla-contradictory"
+      }
+    },
+    {
+      "id": "messy_corolla_ambiguous_mileage",
+      "listing": {
+        "title": "Toyota Corolla engine replaced at 50k car has 120k",
+        "year": 2016,
+        "make": "Toyota",
+        "model": "Corolla",
+        "price": 8800,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/corolla-ambiguous-miles"
+      }
+    },
+    {
+      "id": "messy_corolla_service_history_noise",
+      "listing": {
+        "title": "oil change every 5000 miles 2016 Toyota Corolla LE",
+        "price": "$10,200",
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/corolla-service-noise"
+      }
+    },
+    {
+      "id": "messy_corolla_budget_boundary",
+      "listing": {
+        "title": "2016 Toyota Corolla LE — priced to move",
+        "year": 2016,
+        "make": "Toyota",
+        "model": "Corolla",
+        "mileage": 88000,
+        "price": 12000,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/corolla-budget-edge"
+      }
+    },
+    {
+      "id": "messy_corolla_flood_wording",
+      "listing": {
+        "title": "2016 Toyota Corolla S 78k",
+        "description": "flood damage repaired, priced accordingly",
+        "price": 7500,
+        "listing_url": "https://demo.carlens.local/messy/corolla-flood"
+      }
+    },
+    {
+      "id": "messy_corolla_over_budget",
+      "listing": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 82000,
+        "price": 15500,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/corolla-over-budget"
+      }
+    },
+    {
+      "id": "messy_corolla_very_high_mileage",
+      "listing": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 168000,
+        "price": 6900,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/corolla-high-miles"
+      }
+    },
+    {
+      "id": "messy_price_drop_civic",
+      "listing": {
+        "title": "PRICE DROP 2022!!! 2014 Honda Civic EX",
+        "price": "$10,800",
+        "listing_url": "https://demo.carlens.local/messy/civic-price-drop"
+      }
+    },
+    {
+      "id": "messy_civic_good_ex",
+      "listing": {
+        "make": "Honda",
+        "model": "Civic",
+        "year": 2014,
+        "trim": "EX",
+        "mileage": 91000,
+        "price": 10900,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/civic-good-ex"
+      }
+    },
+    {
+      "id": "messy_civic_2016_known_bad_year",
+      "listing": {
+        "title": "2016 Honda Civic LX low miles!!!",
+        "mileage": 72000,
+        "price": 11500,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/civic-2016-bad-year"
+      }
+    },
+    {
+      "id": "messy_civic_mileage_boundary",
+      "listing": {
+        "make": "Honda",
+        "model": "Civic",
+        "year": 2014,
+        "mileage": 130000,
+        "price": 9800,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/civic-mileage-edge"
+      }
+    },
+    {
+      "id": "messy_civic_dirty_title",
+      "listing": {
+        "title": "2014 Honda Civic EX-L salvage title cheap",
+        "price": 6500,
+        "listing_url": "https://demo.carlens.local/messy/civic-dirty"
+      }
+    },
+    {
+      "id": "messy_civic_over_budget",
+      "listing": {
+        "make": "Honda",
+        "model": "Civic",
+        "year": 2014,
+        "mileage": 86000,
+        "price": 14200,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/civic-over-budget"
+      }
+    },
+    {
+      "id": "messy_camry_commuter_title",
+      "listing": {
+        "title": "2015 Toyota Camry SE 88k miles clean carfax",
+        "price": "$11,400",
+        "listing_url": "https://demo.carlens.local/messy/camry-commuter"
+      }
+    },
+    {
+      "id": "messy_camry_rebuilt_title",
+      "listing": {
+        "title": "2014 Toyota Camry LE rebuilt title",
+        "mileage": 102000,
+        "price": 8900,
+        "listing_url": "https://demo.carlens.local/messy/camry-rebuilt"
+      }
+    },
+    {
+      "id": "messy_camry_high_mileage",
+      "listing": {
+        "make": "Toyota",
+        "model": "Camry",
+        "year": 2015,
+        "mileage": 148000,
+        "price": 8200,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/camry-high-miles"
+      }
+    },
+    {
+      "id": "messy_camry_sparse",
+      "listing": {
+        "title": "2013 Toyota Camry",
+        "price": "9500",
+        "listing_url": "https://demo.carlens.local/messy/camry-sparse"
+      }
+    },
+    {
+      "id": "messy_camry_over_budget",
+      "listing": {
+        "make": "Toyota",
+        "model": "Camry",
+        "year": 2016,
+        "mileage": 79000,
+        "price": 16500,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/camry-over-budget"
+      }
+    },
+    {
+      "id": "messy_mazda3_hatch_title",
+      "listing": {
+        "title": "2016 Mazda Mazda3 i Touring hatch 79k clean title",
+        "price": "$10,600",
+        "listing_url": "https://demo.carlens.local/messy/mazda3-hatch"
+      }
+    },
+    {
+      "id": "messy_mazda3_missing_price",
+      "listing": {
+        "make": "Mazda",
+        "model": "Mazda3",
+        "year": 2016,
+        "mileage": 84000,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/mazda3-no-price"
+      }
+    },
+    {
+      "id": "messy_mazda3_old_year",
+      "listing": {
+        "make": "Mazda",
+        "model": "Mazda3",
+        "year": 2012,
+        "mileage": 118000,
+        "price": 6200,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/mazda3-old-year"
+      }
+    },
+    {
+      "id": "messy_mazda3_high_mileage",
+      "listing": {
+        "make": "Mazda",
+        "model": "Mazda3",
+        "year": 2016,
+        "mileage": 141000,
+        "price": 7800,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/mazda3-high-miles"
+      }
+    },
+    {
+      "id": "messy_outback_awd_title",
+      "listing": {
+        "title": "2015 Subaru Outback 2.5i Premium AWD 94k clean title",
+        "price": "$11,800",
+        "listing_url": "https://demo.carlens.local/messy/outback-awd-good"
+      }
+    },
+    {
+      "id": "messy_outback_rebuilt_title",
+      "listing": {
+        "title": "Subaru Outback AWD 160k rebuilt title",
+        "year": 2014,
+        "make": "Subaru",
+        "model": "Outback",
+        "price": 9900,
+        "listing_url": "https://demo.carlens.local/messy/outback-rebuilt"
+      }
+    },
+    {
+      "id": "messy_outback_dup_wording_a",
+      "listing": {
+        "title": "2014 Subaru Outback 2.5i AWD wagon 108k miles",
+        "price": "$10,500",
+        "listing_url": "https://demo.carlens.local/messy/outback-dup-108k",
+        "source": "autotrader",
+        "listing_id": "at-outback-108k"
+      }
+    },
+    {
+      "id": "messy_outback_dup_wording_b",
+      "listing": {
+        "title": "2014 Subaru Outback AWD 108,000 mi — one owner",
+        "price": 10500,
+        "clean_title": true,
+        "drive_type": "awd",
+        "listing_url": "https://demo.carlens.local/messy/outback-dup-108k",
+        "source": "autotrader",
+        "listing_id": "at-outback-108k"
+      }
+    },
+    {
+      "id": "messy_outback_fwd_not_awd",
+      "listing": {
+        "make": "Subaru",
+        "model": "Outback",
+        "year": 2015,
+        "mileage": 99000,
+        "price": 10400,
+        "clean_title": true,
+        "drive_type": "fwd",
+        "listing_url": "https://demo.carlens.local/messy/outback-fwd"
+      }
+    },
+    {
+      "id": "messy_outback_known_bad_2013",
+      "listing": {
+        "make": "Subaru",
+        "model": "Outback",
+        "year": 2013,
+        "mileage": 115000,
+        "price": 8900,
+        "clean_title": true,
+        "drive_type": "awd",
+        "listing_url": "https://demo.carlens.local/messy/outback-2013"
+      }
+    },
+    {
+      "id": "messy_crv_good_title",
+      "listing": {
+        "title": "2015 Honda CR-V EX 96k miles clean title",
+        "make": "Honda",
+        "model": "CR-V",
+        "year": 2015,
+        "mileage": 96000,
+        "price": "$11,900",
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/crv-good"
+      }
+    },
+    {
+      "id": "messy_crv_over_budget",
+      "listing": {
+        "make": "Honda",
+        "model": "CR-V",
+        "year": 2016,
+        "mileage": 87000,
+        "price": 18500,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/crv-over-budget"
+      }
+    },
+    {
+      "id": "messy_crv_sparse",
+      "listing": {
+        "title": "Honda CR-V EX AWD loaded",
+        "make": "Honda",
+        "model": "CR-V",
+        "year": 2014,
+        "price": 10800,
+        "listing_url": "https://demo.carlens.local/messy/crv-sparse"
+      }
+    },
+    {
+      "id": "messy_rav4_clean",
+      "listing": {
+        "title": "2016 Toyota RAV4 LE 84k miles",
+        "make": "Toyota",
+        "model": "RAV4",
+        "year": 2016,
+        "mileage": 84000,
+        "price": 13900,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/rav4-clean"
+      }
+    },
+    {
+      "id": "messy_rav4_dirty",
+      "listing": {
+        "title": "2015 Toyota RAV4 XLE rebuilt title",
+        "make": "Toyota",
+        "model": "RAV4",
+        "year": 2015,
+        "mileage": 101000,
+        "price": 11200,
+        "listing_url": "https://demo.carlens.local/messy/rav4-rebuilt"
+      }
+    },
+    {
+      "id": "messy_rav4_high_miles",
+      "listing": {
+        "make": "Toyota",
+        "model": "RAV4",
+        "year": 2014,
+        "mileage": 156000,
+        "price": 9400,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/rav4-high-miles"
+      }
+    },
+    {
+      "id": "messy_wrong_bmw_328i",
+      "listing": {
+        "title": "2015 BMW 328i xDrive 88k — luxury sport sedan",
+        "make": "BMW",
+        "model": "328i",
+        "year": 2015,
+        "mileage": 88000,
+        "price": 11900,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/bmw-328i"
+      }
+    },
+    {
+      "id": "messy_wrong_jeep_cherokee",
+      "listing": {
+        "title": "2014 Jeep Cherokee Latitude 4x4 102k",
+        "make": "Jeep",
+        "model": "Cherokee",
+        "year": 2014,
+        "mileage": 102000,
+        "price": 10500,
+        "listing_url": "https://demo.carlens.local/messy/jeep-cherokee"
+      }
+    },
+    {
+      "id": "messy_wrong_nissan_altima",
+      "listing": {
+        "make": "Nissan",
+        "model": "Altima",
+        "year": 2016,
+        "mileage": 93000,
+        "price": 9800,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/altima-wrong"
+      }
+    },
+    {
+      "id": "messy_invalid_no_year",
+      "listing": {
+        "title": "Toyota Corolla for sale cheap",
+        "price": 7000,
+        "listing_url": "https://demo.carlens.local/messy/invalid-no-year"
+      }
+    },
+    {
+      "id": "messy_corolla_maybe_mileage",
+      "listing": {
+        "title": "2016 Toyota Corolla 92k? maybe 120k miles",
+        "price": 9900,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/messy/corolla-maybe-miles"
+      }
+    }
+  ]
+}
