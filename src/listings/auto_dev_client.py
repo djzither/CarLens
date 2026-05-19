@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 from src.listings.listing_source_adapter import adapt_auto_dev_listing
 
@@ -126,20 +125,11 @@ class _ResponseCache:
 
 
 def _build_session() -> requests.Session:
-    retry = Retry(
-        total=MAX_RETRIES,
-        connect=MAX_RETRIES,
-        read=MAX_RETRIES,
-        backoff_factor=RETRY_BACKOFF_FACTOR,
-        status_forcelist=sorted(TRANSIENT_STATUS_CODES),
-        allowed_methods=frozenset({"GET"}),
-        raise_on_status=False,
-    )
-    adapter = HTTPAdapter(max_retries=retry)
-    session = requests.Session()
-    session.mount("https://", adapter)
-    session.mount("http://", adapter)
-    return session
+    return requests.Session()
+
+
+def _retry_delay(attempt: int) -> float:
+    return RETRY_BACKOFF_FACTOR * (2**attempt)
 
 
 class AutoDevClient:
@@ -185,23 +175,44 @@ class AutoDevClient:
                 return AutoDevClientResult(payload=cached)
 
         url = f"{self.base_url}{path}"
-        try:
-            logger.info("Auto.dev request made")
-            response = self._session.get(
-                url,
-                headers=self._headers(),
-                params=params or None,
-                timeout=REQUEST_TIMEOUT_SECONDS,
-            )
-        except requests.Timeout as exc:
+        response: requests.Response | None = None
+        last_error: str | None = None
+
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                logger.info("Auto.dev request made")
+                response = self._session.get(
+                    url,
+                    headers=self._headers(),
+                    params=params or None,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                )
+            except requests.Timeout as exc:
+                last_error = f"Auto.dev request timed out: {exc}"
+                if attempt < MAX_RETRIES:
+                    time.sleep(_retry_delay(attempt))
+                    continue
+                return AutoDevClientResult(payload={}, errors=[last_error])
+            except requests.RequestException as exc:
+                last_error = f"Auto.dev request failed: {exc}"
+                if attempt < MAX_RETRIES:
+                    time.sleep(_retry_delay(attempt))
+                    continue
+                return AutoDevClientResult(payload={}, errors=[last_error])
+
+            if (
+                response is not None
+                and response.status_code in TRANSIENT_STATUS_CODES
+                and attempt < MAX_RETRIES
+            ):
+                time.sleep(_retry_delay(attempt))
+                continue
+            break
+
+        if response is None:
             return AutoDevClientResult(
                 payload={},
-                errors=[f"Auto.dev request timed out: {exc}"],
-            )
-        except requests.RequestException as exc:
-            return AutoDevClientResult(
-                payload={},
-                errors=[f"Auto.dev request failed: {exc}"],
+                errors=[last_error or "Auto.dev request failed"],
             )
 
         if response.status_code in TRANSIENT_STATUS_CODES:

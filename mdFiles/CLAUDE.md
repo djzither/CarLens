@@ -158,3 +158,24 @@ streamlit run app/main.py
 Run evaluation:
 
 python -m evaluation.run_eval
+
+## External API Policy
+
+CarLens uses real providers sparingly.
+
+Rules:
+
+- Fixture providers must never be removed
+- Fixtures are fallback if APIs fail
+- Mock responses in tests
+- Avoid real API calls in unit tests
+- Return raw provider payloads
+- Adapters own normalization
+- Cache repeated requests during development
+- Log external requests
+- Prefer one real provider before adding more
+- API failures should never crash aggregate search
+
+Environment:
+
+AUTODEV_API_KEY
