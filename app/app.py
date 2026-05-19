@@ -23,6 +23,8 @@ import streamlit as st
 
 from listing_display import (
     DIRTY_TITLE_BANNER,
+    STRONG_FIT_LOW_CONFIDENCE_CAPTION,
+    STRONG_FIT_LOW_CONFIDENCE_HEADLINE,
     WATCHOUT_MISSING_MILEAGE,
     WATCHOUT_MISSING_PRICE,
     budget_option_listing_names,
@@ -42,6 +44,7 @@ from listing_display import (
     qualifies_as_top_pick,
     resolve_listing_display_name,
     resolve_listing_summary_badge,
+    shows_strong_fit_low_confidence_warning,
     top_pick_banner_text,
     UNMATCHED_SECTION_INTRO,
 )
@@ -395,6 +398,9 @@ def render_listing_summary(
         st.warning(WATCHOUT_MISSING_PRICE)
     if listing_has_missing_mileage(listing):
         st.warning(WATCHOUT_MISSING_MILEAGE)
+    if shows_strong_fit_low_confidence_warning(fit, confidence):
+        st.warning(STRONG_FIT_LOW_CONFIDENCE_HEADLINE)
+        st.caption(STRONG_FIT_LOW_CONFIDENCE_CAPTION)
 
     badge = resolve_listing_summary_badge(
         entry,

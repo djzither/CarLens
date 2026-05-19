@@ -6,6 +6,8 @@ from app.listing_display import (
     SUMMARY_BADGE_BUDGET,
     SUMMARY_BADGE_CAUTION,
     SUMMARY_BADGE_TOP_PICK,
+    STRONG_FIT_LOW_CONFIDENCE_CAPTION,
+    STRONG_FIT_LOW_CONFIDENCE_HEADLINE,
     WATCHOUT_MISSING_MILEAGE,
     WATCHOUT_MISSING_PRICE,
     build_watchouts,
@@ -28,6 +30,7 @@ from app.listing_display import (
     qualifies_as_top_pick,
     resolve_listing_display_name,
     resolve_listing_summary_badge,
+    shows_strong_fit_low_confidence_warning,
     top_pick_banner_text,
     warning_is_major,
 )
@@ -230,6 +233,25 @@ def test_format_listing_source_markdown_view_listing():
 
 def test_format_listing_source_markdown_without_url():
     assert format_listing_source_markdown({}) == "No source link"
+
+
+def test_strong_fit_low_confidence_triggers_warning():
+    fit = {"fit_label": "Strong fit"}
+    confidence = {"confidence_level": "Low"}
+    assert shows_strong_fit_low_confidence_warning(fit, confidence) is True
+    assert STRONG_FIT_LOW_CONFIDENCE_HEADLINE.startswith("⚠")
+
+
+def test_strong_fit_high_confidence_does_not_trigger_warning():
+    fit = {"fit_label": "Strong fit"}
+    confidence = {"confidence_level": "High"}
+    assert shows_strong_fit_low_confidence_warning(fit, confidence) is False
+
+
+def test_moderate_fit_low_confidence_does_not_trigger_strong_fit_warning():
+    fit = {"fit_label": "Moderate fit"}
+    confidence = {"confidence_level": "Low"}
+    assert shows_strong_fit_low_confidence_warning(fit, confidence) is False
 
 
 def test_format_listing_source_markdown_shows_source_label():
