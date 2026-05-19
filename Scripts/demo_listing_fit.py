@@ -19,15 +19,37 @@ from src.recommendation.recommendation_engine import recommend
 SAMPLE_LISTINGS_PATH = PROJECT_ROOT / "data" / "sample_listings" / "student_listings.json"
 
 
-def load_sample_listings(path: Path = SAMPLE_LISTINGS_PATH) -> tuple[str, list[tuple[str, dict[str, Any]]]]:
+def load_sample_listings(
+    path: Path = SAMPLE_LISTINGS_PATH,
+) -> tuple[str, list[tuple[str, dict[str, Any]]], dict[str, str]]:
     with path.open(encoding="utf-8") as handle:
         data = json.load(handle)
 
     buyer_profile_id = data["buyer_profile_id"]
     scenarios: list[tuple[str, dict[str, Any]]] = []
+    display_names: dict[str, str] = {}
     for entry in data["listings"]:
         scenarios.append((entry["id"], entry["listing"]))
-    return buyer_profile_id, scenarios
+        name = entry.get("display_name")
+        if name and str(name).strip():
+            display_names[entry["id"]] = str(name).strip()
+    return buyer_profile_id, scenarios, display_names
+
+
+def scenario_display_label(
+    scenario_id: str,
+    listing: dict[str, Any],
+    display_names: dict[str, str],
+) -> str:
+    if scenario_id in display_names:
+        return display_names[scenario_id]
+    title = listing.get("raw_title") or listing.get("title")
+    if title and str(title).strip():
+        return str(title).strip()
+    return (
+        f"{listing.get('year', '')} {listing.get('make', '')} "
+        f"{listing.get('model', '')}".strip()
+    )
 
 
 def _find_buyer(profiles: list[dict], buyer_profile_id: str) -> dict:
@@ -81,7 +103,12 @@ def format_scenario_output(scenario_name: str, listing: dict, fit: dict) -> str:
     return "\n".join(lines)
 
 
-def format_grouped_summary(ranked: dict[str, Any]) -> str:
+def format_grouped_summary(
+    ranked: dict[str, Any],
+    *,
+    display_names: dict[str, str] | None = None,
+) -> str:
+    labels = display_names or {}
     lines: list[str] = []
 
     for group in ranked["groups"]:
@@ -94,8 +121,13 @@ def format_grouped_summary(ranked: dict[str, Any]) -> str:
         else:
             for rank, entry in enumerate(group["listings"], start=1):
                 fit = entry["fit"]
+                label = scenario_display_label(
+                    entry["listing_name"],
+                    entry["listing"],
+                    labels,
+                )
                 lines.append(
-                    f"  {rank}. {entry['listing_name']} — {fit['fit_label']} — "
+                    f"  {rank}. {label} — {fit['fit_label']} — "
                     f"{fit['fit_score']:.3f}"
                 )
         lines.append("")
@@ -104,8 +136,13 @@ def format_grouped_summary(ranked: dict[str, Any]) -> str:
         lines.append("Unmatched listings:")
         for entry in ranked["unmatched_listings"]:
             fit = entry["fit"]
+            label = scenario_display_label(
+                entry["listing_name"],
+                entry["listing"],
+                labels,
+            )
             lines.append(
-                f"  {entry['listing_name']} — {fit['fit_label']} — {fit['fit_score']:.3f}"
+                f"  {label} — {fit['fit_label']} — {fit['fit_score']:.3f}"
             )
         lines.append("")
 
@@ -120,7 +157,12 @@ def format_grouped_summary(ranked: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip()
 
 
-def format_grouped_details(ranked: dict[str, Any]) -> str:
+def format_grouped_details(
+    ranked: dict[str, Any],
+    *,
+    display_names: dict[str, str] | None = None,
+) -> str:
+    labels = display_names or {}
     blocks: list[str] = []
 
     for group in ranked["groups"]:
@@ -132,19 +174,25 @@ def format_grouped_details(ranked: dict[str, Any]) -> str:
             blocks.append(group.get("coverage_message", "No matching listings found"))
         else:
             for entry in group["listings"]:
+                label = scenario_display_label(
+                    entry["listing_name"],
+                    entry["listing"],
+                    labels,
+                )
                 blocks.append(
-                    format_scenario_output(
-                        entry["listing_name"], entry["listing"], entry["fit"]
-                    )
+                    format_scenario_output(label, entry["listing"], entry["fit"])
                 )
 
     if ranked["unmatched_listings"]:
         blocks.append("--- Unmatched listings ---")
         for entry in ranked["unmatched_listings"]:
+            label = scenario_display_label(
+                entry["listing_name"],
+                entry["listing"],
+                labels,
+            )
             blocks.append(
-                format_scenario_output(
-                    entry["listing_name"], entry["listing"], entry["fit"]
-                )
+                format_scenario_output(label, entry["listing"], entry["fit"])
             )
 
     if ranked.get("invalid_listings"):
@@ -162,7 +210,7 @@ def format_grouped_details(ranked: dict[str, Any]) -> str:
 
 def main() -> int:
     try:
-        buyer_profile_id, scenarios = load_sample_listings()
+        buyer_profile_id, scenarios, display_names = load_sample_listings()
     except (OSError, json.JSONDecodeError, KeyError) as exc:
         print(f"Error loading sample listings: {exc}", file=sys.stderr)
         return 1
@@ -181,9 +229,9 @@ def main() -> int:
     print()
 
     ranked = rank_listings_by_recommendation(scenarios, recommendations, buyer)
-    print(format_grouped_summary(ranked))
+    print(format_grouped_summary(ranked, display_names=display_names))
     print()
-    print(format_grouped_details(ranked))
+    print(format_grouped_details(ranked, display_names=display_names))
     return 0
 
 

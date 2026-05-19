@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+from app.listing_display import resolve_listing_display_name
 from src.listings.listing_ranker import rank_listings_by_recommendation
 from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.recommendation_engine import recommend
@@ -49,17 +50,40 @@ def test_student_sample_listings_file_exists():
 
 def test_student_sample_listings_has_expected_scenarios():
     demo = _load_demo_module()
-    buyer_profile_id, scenarios = demo.load_sample_listings(SAMPLE_LISTINGS_PATH)
+    buyer_profile_id, scenarios, display_names = demo.load_sample_listings(
+        SAMPLE_LISTINGS_PATH
+    )
 
     assert buyer_profile_id == "student"
     assert [name for name, _ in scenarios] == EXPECTED_LISTING_IDS
     assert scenarios[0][1]["make"] == "Toyota"
     assert scenarios[0][1]["model"] == "Corolla"
+    assert display_names["good_corolla"] == "2016 Toyota Corolla LE"
+    assert scenarios[0][1]["raw_title"].startswith("2016 Toyota Corolla")
+    assert scenarios[0][1]["source"] == "facebook_marketplace"
+    assert scenarios[0][1]["price"] == 10487
+    assert scenarios[0][1]["mileage"] == 84932
+
+
+def test_resolve_listing_display_name_uses_display_name_not_synthetic_id():
+    demo = _load_demo_module()
+    _, scenarios, display_names = demo.load_sample_listings(SAMPLE_LISTINGS_PATH)
+    scenario_id, listing = scenarios[0]
+    entry = {
+        "listing_name": scenario_id,
+        "display_name": display_names[scenario_id],
+        "listing": listing,
+    }
+    label = resolve_listing_display_name(entry, listing)
+    assert label == "2016 Toyota Corolla LE"
+    assert "good_corolla" not in label
 
 
 def _ranked_student_listings() -> dict[str, Any]:
     demo = _load_demo_module()
-    buyer_profile_id, scenarios = demo.load_sample_listings(SAMPLE_LISTINGS_PATH)
+    buyer_profile_id, scenarios, _display_names = demo.load_sample_listings(
+        SAMPLE_LISTINGS_PATH
+    )
     buyer_data = load_buyer_profiles()
     buyer = demo._find_buyer(buyer_data["profiles"], buyer_profile_id)
     recommendations = recommend(buyer_profile_id)["recommendations"]
@@ -174,13 +198,19 @@ def test_budget_boundary_corolla_within_budget(ranked_student_listings):
 
 def test_format_grouped_summary_lists_groups_and_unmatched(ranked_student_listings):
     demo = _load_demo_module()
-    summary = demo.format_grouped_summary(ranked_student_listings)
+    _, _, display_names = demo.load_sample_listings(SAMPLE_LISTINGS_PATH)
+    summary = demo.format_grouped_summary(
+        ranked_student_listings,
+        display_names=display_names,
+    )
 
     assert "Recommendation #1:" in summary
     assert "Toyota Corolla" in summary
-    assert "good_corolla" in summary
+    assert "2016 Toyota Corolla LE" in summary
+    assert "good_corolla" not in summary
     assert "Unmatched listings:" in summary
-    assert "wrong_model_bmw" in summary
+    assert "2015 BMW 328i" in summary
+    assert "wrong_model_bmw" not in summary
 
 
 def test_format_grouped_summary_does_not_crash_on_empty_groups(ranked_student_listings):

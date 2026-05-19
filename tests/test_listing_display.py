@@ -232,6 +232,13 @@ def test_format_listing_source_markdown_without_url():
     assert format_listing_source_markdown({}) == "No source link"
 
 
+def test_format_listing_source_markdown_shows_source_label():
+    listing = {"source": "facebook_marketplace"}
+    text = format_listing_source_markdown(listing)
+    assert "Facebook Marketplace" in text
+    assert "good_corolla" not in text
+
+
 def test_warning_is_major_detects_dirty_title():
     assert warning_is_major(DIRTY_TITLE_WARNING)
 

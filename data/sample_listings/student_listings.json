@@ -4,211 +4,268 @@
   "listings": [
     {
       "id": "good_corolla",
+      "display_name": "2016 Toyota Corolla LE",
       "listing": {
         "make": "Toyota",
         "model": "Corolla",
         "year": 2016,
-        "mileage": 85000,
-        "price": 10500,
+        "mileage": 84932,
+        "price": 10487,
         "clean_title": true,
-        "trim": "LE"
+        "trim": "LE",
+        "raw_title": "2016 Toyota Corolla LE — Low mileage, clean title",
+        "source": "facebook_marketplace"
       }
     },
     {
       "id": "budget_boundary_corolla",
+      "display_name": "2016 Toyota Corolla",
       "listing": {
         "make": "Toyota",
         "model": "Corolla",
         "year": 2016,
-        "mileage": 85000,
-        "price": 12000,
-        "clean_title": true
+        "mileage": 85102,
+        "price": 11956,
+        "clean_title": true,
+        "raw_title": "2016 Toyota Corolla — One owner, serviced at dealer",
+        "source": "craigslist"
       }
     },
     {
       "id": "over_budget_corolla",
+      "display_name": "2016 Toyota Corolla",
       "listing": {
         "make": "Toyota",
         "model": "Corolla",
         "year": 2016,
-        "mileage": 85000,
-        "price": 15000,
-        "clean_title": true
+        "mileage": 85218,
+        "price": 14873,
+        "clean_title": true,
+        "raw_title": "2016 Toyota Corolla — Loaded, negotiable OBO",
+        "source": "autotrader"
       }
     },
     {
       "id": "dirty_title_corolla",
+      "display_name": "2016 Toyota Corolla",
       "listing": {
         "make": "Toyota",
         "model": "Corolla",
         "year": 2016,
-        "mileage": 85000,
-        "price": 10500,
-        "clean_title": false
+        "mileage": 84765,
+        "price": 10412,
+        "clean_title": false,
+        "raw_title": "2016 Toyota Corolla — Rebuilt title, runs great",
+        "source": "facebook_marketplace"
       }
     },
     {
       "id": "out_of_range_year_corolla",
+      "display_name": "2009 Toyota Corolla",
       "listing": {
         "make": "Toyota",
         "model": "Corolla",
         "year": 2009,
-        "mileage": 85000,
-        "price": 8000,
-        "clean_title": true
+        "mileage": 84690,
+        "price": 7945,
+        "clean_title": true,
+        "raw_title": "2009 Toyota Corolla — High miles but reliable daily",
+        "source": "craigslist"
       }
     },
     {
       "id": "high_mileage_corolla",
+      "display_name": "2016 Toyota Corolla",
       "listing": {
         "make": "Toyota",
         "model": "Corolla",
         "year": 2016,
-        "mileage": 140000,
-        "price": 10500,
-        "clean_title": true
+        "mileage": 139547,
+        "price": 10487,
+        "clean_title": true,
+        "raw_title": "2016 Toyota Corolla — Highway commuter, records available",
+        "source": "cars.com"
       }
     },
     {
       "id": "stacked_risk_corolla",
+      "display_name": "2009 Toyota Corolla",
       "listing": {
         "make": "Toyota",
         "model": "Corolla",
         "year": 2009,
-        "mileage": 145000,
-        "price": 15000,
-        "clean_title": false
+        "mileage": 146218,
+        "price": 14891,
+        "clean_title": false,
+        "raw_title": "2009 Toyota Corolla — Salvage title, as-is cash only",
+        "source": "facebook_marketplace"
       }
     },
     {
       "id": "low_mileage_overpriced_corolla",
+      "display_name": "2016 Toyota Corolla",
       "listing": {
         "make": "Toyota",
         "model": "Corolla",
         "year": 2016,
-        "mileage": 28000,
-        "price": 14500,
-        "clean_title": true
+        "mileage": 28104,
+        "price": 14418,
+        "clean_title": true,
+        "raw_title": "2016 Toyota Corolla — Garaged, only 28k miles",
+        "source": "autotrader"
       }
     },
     {
       "id": "missing_trim_corolla",
+      "display_name": "2016 Toyota Corolla",
       "listing": {
         "make": "Toyota",
         "model": "Corolla",
         "year": 2016,
-        "mileage": 85000,
-        "price": 10500,
-        "clean_title": true
+        "mileage": 84932,
+        "price": 10487,
+        "clean_title": true,
+        "raw_title": "2016 Toyota Corolla — Clean Carfax, no accidents",
+        "source": "cars.com"
       }
     },
     {
       "id": "wrong_trim_corolla",
+      "display_name": "2016 Toyota Corolla XSE Sport",
       "listing": {
         "make": "Toyota",
         "model": "Corolla",
         "year": 2016,
-        "mileage": 85000,
-        "price": 10500,
+        "mileage": 85188,
+        "price": 10463,
         "clean_title": true,
-        "trim": "XSE Sport"
+        "trim": "XSE Sport",
+        "raw_title": "2016 Toyota Corolla XSE Sport — Sport package, sharp",
+        "source": "facebook_marketplace"
       }
     },
     {
       "id": "missing_mileage_corolla",
+      "display_name": "2016 Toyota Corolla",
       "listing": {
         "make": "Toyota",
         "model": "Corolla",
         "year": 2016,
-        "price": 10500,
-        "clean_title": true
+        "price": 10487,
+        "clean_title": true,
+        "raw_title": "2016 Toyota Corolla — Mileage not listed, test drive today",
+        "source": "craigslist"
       }
     },
     {
       "id": "missing_price_corolla",
+      "display_name": "2016 Toyota Corolla",
       "listing": {
         "make": "Toyota",
         "model": "Corolla",
         "year": 2016,
-        "mileage": 85000,
-        "clean_title": true
+        "mileage": 84932,
+        "clean_title": true,
+        "raw_title": "2016 Toyota Corolla — Call for price, motivated seller",
+        "source": "autotrader"
       }
     },
     {
       "id": "good_civic",
+      "display_name": "2014 Honda Civic",
       "listing": {
         "make": "Honda",
         "model": "Civic",
         "year": 2014,
-        "mileage": 90000,
-        "price": 11000,
-        "clean_title": true
+        "mileage": 91312,
+        "price": 10942,
+        "clean_title": true,
+        "raw_title": "2014 Honda Civic — Reliable commuter, clean title",
+        "source": "facebook_marketplace"
       }
     },
     {
       "id": "cheap_dirty_title_civic",
+      "display_name": "2014 Honda Civic",
       "listing": {
         "make": "Honda",
         "model": "Civic",
         "year": 2014,
-        "mileage": 115000,
-        "price": 7500,
-        "clean_title": false
+        "mileage": 114688,
+        "price": 7389,
+        "clean_title": false,
+        "raw_title": "2014 Honda Civic — Branded title, cheap transportation",
+        "source": "craigslist"
       }
     },
     {
       "id": "good_camry",
+      "display_name": "2015 Toyota Camry",
       "listing": {
         "make": "Toyota",
         "model": "Camry",
         "year": 2015,
-        "mileage": 92000,
-        "price": 11000,
-        "clean_title": true
+        "mileage": 91876,
+        "price": 10942,
+        "clean_title": true,
+        "raw_title": "2015 Toyota Camry — Smooth ride, non-smoker",
+        "source": "cars.com"
       }
     },
     {
       "id": "good_mazda3",
+      "display_name": "2016 Mazda Mazda3",
       "listing": {
         "make": "Mazda",
         "model": "Mazda3",
         "year": 2016,
-        "mileage": 88000,
-        "price": 10500,
-        "clean_title": true
+        "mileage": 87291,
+        "price": 10487,
+        "clean_title": true,
+        "raw_title": "2016 Mazda3 — Fun to drive, new tires",
+        "source": "autotrader"
       }
     },
     {
       "id": "good_year_high_mileage_mazda3",
+      "display_name": "2016 Mazda Mazda3",
       "listing": {
         "make": "Mazda",
         "model": "Mazda3",
         "year": 2016,
-        "mileage": 145000,
-        "price": 9500,
-        "clean_title": true
+        "mileage": 146205,
+        "price": 9461,
+        "clean_title": true,
+        "raw_title": "2016 Mazda3 — Higher miles, priced to move",
+        "source": "facebook_marketplace"
       }
     },
     {
       "id": "good_outback",
+      "display_name": "2016 Subaru Outback",
       "listing": {
         "make": "Subaru",
         "model": "Outback",
         "year": 2016,
-        "mileage": 95000,
-        "price": 11500,
-        "clean_title": true
+        "mileage": 95744,
+        "price": 11427,
+        "clean_title": true,
+        "raw_title": "2016 Subaru Outback — AWD, great for winter",
+        "source": "cars.com"
       }
     },
     {
       "id": "wrong_model_bmw",
+      "display_name": "2015 BMW 328i",
       "listing": {
         "make": "BMW",
         "model": "328i",
         "year": 2015,
-        "mileage": 90000,
-        "price": 11000,
-        "clean_title": true
+        "mileage": 91108,
+        "price": 10942,
+        "clean_title": true,
+        "raw_title": "2015 BMW 328i — Luxury sport sedan, must see",
+        "source": "autotrader"
       }
     }
   ]

@@ -35,6 +35,11 @@ _MAJOR_WARNING_MARKERS = (
 
 WATCHOUT_MISSING_PRICE = "Price not listed — cannot verify budget fit"
 WATCHOUT_MISSING_MILEAGE = "Mileage not listed — cannot verify wear/usage"
+STRONG_FIT_LOW_CONFIDENCE_HEADLINE = "⚠ Strong fit but low data confidence"
+STRONG_FIT_LOW_CONFIDENCE_CAPTION = (
+    "Good overall match but missing important information. "
+    "Verify details before purchase."
+)
 DIRTY_TITLE_BANNER = (
     "Dirty or branded title reported — verify title status before purchase."
 )
@@ -412,9 +417,27 @@ def listing_has_missing_mileage(listing: dict[str, Any]) -> bool:
     return listing.get("mileage") is None
 
 
+_DEMO_ID_PREFIXES = (
+    "adv_",
+    "messy_",
+    "sparse_",
+    "good_",
+    "budget_",
+    "over_",
+    "dirty_",
+    "out_of_",
+    "high_",
+    "stacked_",
+    "low_",
+    "missing_",
+    "wrong_",
+    "cheap_",
+)
+
+
 def _looks_like_internal_listing_id(name: str) -> bool:
     lowered = name.casefold()
-    return lowered.startswith(("adv_", "messy_", "good_", "sparse_", "budget_"))
+    return lowered.startswith(_DEMO_ID_PREFIXES)
 
 
 def resolve_listing_display_name(
@@ -554,11 +577,27 @@ def listing_source_url(listing: dict[str, Any]) -> str | None:
     return None
 
 
+_SOURCE_LABELS: dict[str, str] = {
+    "facebook_marketplace": "Facebook Marketplace",
+    "craigslist": "Craigslist",
+    "autotrader": "AutoTrader",
+    "cars.com": "Cars.com",
+    "auto.dev": "Auto.dev",
+    "marketcheck": "MarketCheck",
+}
+
+
 def format_listing_source_markdown(listing: dict[str, Any]) -> str:
     """Markdown for the listing source line on a card."""
     url = listing_source_url(listing)
+    source = listing.get("source")
+    source_label = _SOURCE_LABELS.get(str(source), str(source)) if source else None
+    if url and source_label:
+        return f"**Source:** {source_label} · [View listing]({url})"
     if url:
         return f"[View listing]({url})"
+    if source_label:
+        return f"**Source:** {source_label}"
     return "No source link"
 
 

@@ -190,11 +190,16 @@ def test_good_awd_outback_for_awd_buyer_is_strong_fit(ranked_outdoor):
 
 def test_format_grouped_summary_handles_empty_and_populated_groups(ranked_student_sparse):
     demo = _load_demo_module()
-    summary = demo.format_grouped_summary(ranked_student_sparse)
+    _, _, display_names = demo.load_sample_listings(STUDENT_LISTINGS_PATH)
+    summary = demo.format_grouped_summary(
+        ranked_student_sparse,
+        display_names=display_names,
+    )
 
     assert "Recommendation #3: Toyota Camry" in summary
     assert "  No matching listings found" in summary
-    assert "good_corolla" in summary
+    assert "2016 Toyota Corolla LE" in summary
+    assert "good_corolla" not in summary
 
 
 def _load_demo_module():
