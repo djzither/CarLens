@@ -1,0 +1,288 @@
+{
+  "pages": [
+    {
+      "data": [
+        {
+          "@id": "https://api.auto.dev/listings/UGLY01NOYEAR00001",
+          "vin": "UGLY01NOYEAR00001",
+          "vehicle": {
+            "vin": "UGLY01NOYEAR00001",
+            "make": "Toyota",
+            "model": "Corolla"
+          },
+          "retailListing": {
+            "price": 9900,
+            "miles": 101000,
+            "vdp": "https://dealer.example/ugly/no-year"
+          }
+        },
+        {
+          "@id": "https://api.auto.dev/listings/UGLY02NOPRICE0002",
+          "vin": "UGLY02NOPRICE0002",
+          "vehicle": {
+            "vin": "UGLY02NOPRICE0002",
+            "year": 2015,
+            "make": "Honda",
+            "model": "Civic"
+          },
+          "retailListing": {
+            "miles": 88000,
+            "vdp": "https://dealer.example/ugly/no-price"
+          }
+        },
+        {
+          "@id": "https://api.auto.dev/listings/UGLY03NOMILES00003",
+          "vin": "UGLY03NOMILES00003",
+          "vehicle": {
+            "vin": "UGLY03NOMILES00003",
+            "year": 2014,
+            "make": "Toyota",
+            "model": "Camry"
+          },
+          "retailListing": {
+            "price": 12500,
+            "vdp": "https://dealer.example/ugly/no-mileage"
+          }
+        },
+        {
+          "@id": "https://api.auto.dev/listings/UGLY04STRPRICE004",
+          "vin": "UGLY04STRPRICE004",
+          "vehicle": {
+            "vin": "UGLY04STRPRICE004",
+            "year": 2013,
+            "make": "Ford",
+            "model": "Focus"
+          },
+          "retailListing": {
+            "price": "11,500",
+            "miles": 76000,
+            "vdp": "https://dealer.example/ugly/string-price"
+          }
+        },
+        {
+          "@id": "https://api.auto.dev/listings/UGLY05STRMILES005",
+          "vin": "UGLY05STRMILES005",
+          "vehicle": {
+            "vin": "UGLY05STRMILES005",
+            "year": 2012,
+            "make": "Nissan",
+            "model": "Altima"
+          },
+          "retailListing": {
+            "price": 8900,
+            "miles": "84,000 mi",
+            "vdp": "https://dealer.example/ugly/string-mileage"
+          }
+        },
+        {
+          "@id": "https://api.auto.dev/listings/DUPLICATEVIN123456-listing-a",
+          "vin": "DUPLICATEVIN123456",
+          "vehicle": {
+            "vin": "DUPLICATEVIN123456",
+            "year": 2017,
+            "make": "Toyota",
+            "model": "RAV4",
+            "trim": "LE"
+          },
+          "retailListing": {
+            "price": 16000,
+            "miles": 72000,
+            "vdp": "https://dealer-a.example/duplicate-vin"
+          }
+        },
+        {
+          "@id": "https://api.auto.dev/listings/DUPLICATEVIN123456-listing-b",
+          "vin": "DUPLICATEVIN123456",
+          "vehicle": {
+            "vin": "DUPLICATEVIN123456",
+            "year": 2017,
+            "make": "Toyota",
+            "model": "RAV4",
+            "trim": "XLE"
+          },
+          "retailListing": {
+            "price": 16500,
+            "miles": 70000,
+            "vdp": "https://dealer-b.example/duplicate-vin"
+          }
+        },
+        {
+          "@id": "https://api.auto.dev/listings/UGLY07BADTITLE07",
+          "vin": "UGLY07BADTITLE07",
+          "vehicle": {
+            "vin": "UGLY07BADTITLE07",
+            "year": 2011,
+            "make": "Toyota",
+            "model": "Corolla",
+            "trim": "!!!UNKNOWN!!!"
+          },
+          "retailListing": {
+            "price": 6500,
+            "miles": 130000,
+            "vdp": "https://dealer.example/ugly/bad-title"
+          }
+        },
+        {
+          "@id": "https://api.auto.dev/listings/UGLY08NULLNEST08",
+          "vin": "UGLY08NULLNEST08",
+          "vehicle": null,
+          "retailListing": null
+        },
+        {
+          "@id": "https://api.auto.dev/listings/UGLY09GOODLIST009",
+          "vin": "UGLY09GOODLIST009",
+          "vehicle": {
+            "vin": "UGLY09GOODLIST009",
+            "year": 2018,
+            "make": "Toyota",
+            "model": "Corolla",
+            "trim": "LE"
+          },
+          "retailListing": {
+            "price": 13900,
+            "miles": 61000,
+            "vdp": "https://dealer.example/ugly/good-listing",
+            "primaryImage": "https://photos.example/ugly09.jpg"
+          }
+        },
+        {
+          "@id": "https://api.auto.dev/listings/ADPT01BADPRICE1",
+          "vin": "ADPT01BADPRICE1",
+          "vehicle": {
+            "vin": "ADPT01BADPRICE1",
+            "year": 2014,
+            "make": "Mazda",
+            "model": "3"
+          },
+          "retailListing": {
+            "price": "11,500 USD",
+            "miles": 80000,
+            "vdp": "https://dealer.example/ugly/bad-price"
+          }
+        },
+        {
+          "@id": "https://api.auto.dev/listings/ADPT02YEARRANGE2",
+          "vin": "ADPT02YEARRANGE2",
+          "vehicle": {
+            "vin": "ADPT02YEARRANGE2",
+            "year": "2015-2016",
+            "make": "Subaru",
+            "model": "Outback"
+          },
+          "retailListing": {
+            "price": 14000,
+            "miles": 70000,
+            "vdp": "https://dealer.example/ugly/year-range"
+          }
+        },
+        {
+          "@id": "https://api.auto.dev/listings/ADPT03WHOLESALE3",
+          "vin": "ADPT03WHOLESALE3",
+          "vehicle": {
+            "vin": "ADPT03WHOLESALE3",
+            "year": 2013,
+            "make": "Ford",
+            "model": "F-150"
+          },
+          "retailListing": {},
+          "wholesaleListing": {
+            "auction": "OVE",
+            "miles": 55000
+          }
+        },
+        {
+          "@id": "https://api.auto.dev/listings/ADPT04BADMILES4",
+          "vin": "ADPT04BADMILES4",
+          "vehicle": {
+            "vin": "ADPT04BADMILES4",
+            "year": 2012,
+            "make": "Kia",
+            "model": "Soul"
+          },
+          "retailListing": {
+            "price": 7500,
+            "miles": "unknown miles",
+            "vdp": "https://dealer.example/ugly/bad-mileage"
+          }
+        },
+        {
+          "@id": "https://api.auto.dev/listings/ADPT05EMPTYRETAIL5",
+          "vin": "ADPT05EMPTYRETAIL5",
+          "vehicle": {
+            "vin": "ADPT05EMPTYRETAIL5",
+            "year": 2011,
+            "make": "Chevrolet",
+            "model": "Cruze"
+          },
+          "retailListing": {}
+        },
+        {
+          "@id": "https://api.auto.dev/listings/ADPT06BADLOCAT6",
+          "vin": "ADPT06BADLOCAT6",
+          "vehicle": {
+            "vin": "ADPT06BADLOCAT6",
+            "year": 2016,
+            "make": "Toyota",
+            "model": "Prius"
+          },
+          "retailListing": {
+            "price": 12000,
+            "miles": 90000,
+            "city": "Dealer Online",
+            "state": "USA",
+            "zip": "00000",
+            "vdp": "https://dealer.example/ugly/placeholder-location"
+          }
+        },
+        {
+          "@id": "https://api.auto.dev/listings/UGLY11DEADURL11",
+          "vin": "UGLY11DEADURL11",
+          "vehicle": {
+            "vin": "UGLY11DEADURL11",
+            "year": 2010,
+            "make": "Honda",
+            "model": "Fit"
+          },
+          "retailListing": {
+            "price": 5200,
+            "miles": 145000,
+            "vdp": "https://dealer.example/removed-listing-410-gone"
+          }
+        }
+      ],
+      "links": {
+        "self": "https://api.auto.dev/listings?page=1&limit=20",
+        "next": "https://api.auto.dev/listings?page=2&limit=20"
+      }
+    },
+    {
+      "data": [
+        {
+          "@id": "https://api.auto.dev/listings/UGLY10PAGE2LIST10",
+          "vin": "UGLY10PAGE2LIST10",
+          "vehicle": {
+            "vin": "UGLY10PAGE2LIST10",
+            "year": 2019,
+            "make": "Toyota",
+            "model": "Corolla",
+            "trim": "SE"
+          },
+          "retailListing": {
+            "price": 15200,
+            "miles": 54000,
+            "vdp": "https://dealer.example/ugly/page-two-only"
+          }
+        }
+      ],
+      "links": {
+        "self": "https://api.auto.dev/listings?page=2&limit=20"
+      }
+    }
+  ],
+  "empty_page": {
+    "data": [],
+    "links": {
+      "self": "https://api.auto.dev/listings?page=99&limit=20"
+    }
+  }
+}

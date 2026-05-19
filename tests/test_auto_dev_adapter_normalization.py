@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
 
 from src.listings.auto_dev_adapter import (
+    _optional_drive_type,
     _optional_location,
     _optional_mileage,
     _optional_price,
@@ -87,13 +89,90 @@ def test_optional_year_invalid_emits_warning() -> None:
 
 @pytest.mark.parametrize(
     "value",
-    ["USA", "Dealer Online", "00000"],
+    ["USA", "NA", "Unknown", "Dealer Online", "00000", ""],
 )
 def test_optional_location_rejects_placeholders(value: str) -> None:
     parsed, warnings = _optional_location(value)
 
     assert parsed is None
-    assert warnings == [f"Invalid location value: {value!r}"]
+    if value == "":
+        assert warnings == []
+    else:
+        assert warnings == [f"Rejected placeholder location: {value!r}"]
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("AWD", "awd"),
+        ("fwd", "fwd"),
+        ("4WD", "4wd"),
+        ("123", None),
+    ],
+)
+def test_optional_drive_type(value: str, expected: str | None) -> None:
+    parsed, warnings = _optional_drive_type(value)
+
+    assert parsed == expected
+    if expected is None:
+        assert warnings == [f"Unexpected drive_type: {value!r}"]
+    else:
+        assert warnings == []
+
+
+def test_malformed_values_log_warnings(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING, logger="src.listings.auto_dev_adapter"):
+        _optional_price("$invalid")
+        _optional_mileage("84k-ish")
+        _optional_location("Dealer Online")
+        _optional_drive_type("123")
+
+    assert "Invalid price value: '$invalid'" in caplog.text
+    assert "Invalid mileage value: '84k-ish'" in caplog.text
+    assert "Rejected placeholder location: 'Dealer Online'" in caplog.text
+    assert "Unexpected drive_type: '123'" in caplog.text
+
+
+def test_year_fallback_extraction_logs_debug(caplog: pytest.LogCaptureFixture) -> None:
+    row = {
+        "vin": "YEARFALLBACKVIN01",
+        "vehicle": {"make": "Toyota", "model": "Corolla"},
+        "retailListing": {"price": 9000, "miles": 80000, "heading": "2014 Toyota Corolla LE"},
+    }
+
+    with caplog.at_level(logging.DEBUG, logger="src.listings.auto_dev_adapter"):
+        raw = adapt_auto_dev_listing(row)
+
+    assert raw["year"] == 2014
+    assert "year extracted from title fallback" in caplog.text
+
+
+def test_clean_title_inferred_logs_debug(caplog: pytest.LogCaptureFixture) -> None:
+    row = {
+        "vin": "CLEANTITLEINFER01",
+        "vehicle": {"year": 2018, "make": "Toyota", "model": "Camry", "drivetrain": "AWD"},
+        "retailListing": {"price": 18000, "miles": 50000, "cleanTitle": True},
+    }
+
+    with caplog.at_level(logging.DEBUG, logger="src.listings.auto_dev_adapter"):
+        raw = adapt_auto_dev_listing(row)
+
+    assert raw.get("clean_title") is True
+    assert "clean_title inferred from provider field" in caplog.text
+
+
+def test_clean_title_default_logs_debug(caplog: pytest.LogCaptureFixture) -> None:
+    row = {
+        "vin": "CLEANTITLEDEBUG1",
+        "vehicle": {"year": 2016, "make": "Honda", "model": "Civic", "drivetrain": "FWD"},
+        "retailListing": {"price": 10000, "miles": 70000},
+    }
+
+    with caplog.at_level(logging.DEBUG, logger="src.listings.auto_dev_adapter"):
+        raw = adapt_auto_dev_listing(row)
+
+    assert "clean_title" not in raw
+    assert "clean_title defaulted to unknown" in caplog.text
 
 
 def test_adapt_coerces_year_range_and_wholesale_mileage() -> None:
@@ -120,7 +199,7 @@ def test_malformed_values_create_adapter_warnings(ugly_provider: AutoDevProvider
 
     assert f"{VIN_BAD_PRICE}: Invalid price value: '11,500 USD'" in joined
     assert f"{VIN_BAD_MILES}: Invalid mileage value: 'unknown miles'" in joined
-    assert "Invalid location value: 'Dealer Online'" in joined
+    assert "Rejected placeholder location: 'Dealer Online'" in joined
 
 
 def test_invalid_price_not_silently_dropped(ugly_provider: AutoDevProvider) -> None:
