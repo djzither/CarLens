@@ -6,11 +6,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from src.listings.listing_source_adapter import MARKETCHECK_SOURCE
+from src.listings.listing_source_adapter import MARKETCHECK_SOURCE, adapt_marketcheck_listing
 from src.listings.marketcheck_client import parse_marketcheck_listings
-from src.listings.providers.base import ListingProvider
-from src.listings.providers.search_support import search_raw_listings
-from src.listings.providers.types import SearchFilters, SearchResult
+from src.listings.providers.raw_listing_provider import RawListingProvider, raw_listing_matches_id
+from src.listings.providers.types import SearchFilters
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_FIXTURE_PATH = (
@@ -22,7 +21,14 @@ DEFAULT_FIXTURE_PATH = (
 )
 
 
-class MarketcheckProvider(ListingProvider):
+def _iter_marketcheck_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    listings = payload.get("listings")
+    if not isinstance(listings, list):
+        return []
+    return [row for row in listings if isinstance(row, dict)]
+
+
+class MarketcheckProvider(RawListingProvider):
     """MarketCheck provider skeleton using offline fixture JSON."""
 
     name = MARKETCHECK_SOURCE
@@ -46,22 +52,17 @@ class MarketcheckProvider(ListingProvider):
             self._payload = data
         return self._payload
 
-    def fetch_raw_listings(self) -> list[dict[str, Any]]:
+    def count_raw_listings(self) -> int:
+        return len(_iter_marketcheck_rows(self.load_fixture_payload()))
+
+    def fetch_raw_listings(self, filters: SearchFilters) -> list[dict[str, Any]]:
         """Parse fixture payload into CarLens raw listings (no HTTP)."""
+        del filters
         return parse_marketcheck_listings(self.load_fixture_payload())
 
-    def search(self, filters: SearchFilters) -> SearchResult:
-        raw_listings = self.fetch_raw_listings()
-        return search_raw_listings(
-            provider_name=self.name,
-            raw_listings=raw_listings,
-            filters=filters,
-            validate_listing=self.validate_listing,
-            total_available=len(raw_listings),
-        )
-
-    def get_by_id(self, listing_id: str) -> dict | None:
-        for record in self.search(SearchFilters()).listings:
-            if record.get("id") == listing_id or record.get("provider_listing_id") == listing_id:
-                return record
+    def fetch_raw_listing_by_id(self, provider_listing_id: str) -> dict[str, Any] | None:
+        for row in _iter_marketcheck_rows(self.load_fixture_payload()):
+            raw = adapt_marketcheck_listing(row)
+            if raw_listing_matches_id(raw, provider_listing_id):
+                return raw
         return None

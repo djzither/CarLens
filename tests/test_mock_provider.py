@@ -298,7 +298,7 @@ def test_provenance_provider_listing_id_falls_back_to_entry_id(
     listing = _listing(entry)
 
     assert entry["provider_listing_id"] == "entry_only_id"
-    assert "listing_id" not in listing
+    assert listing.get("listing_id") == "entry_only_id"
     assert "id" not in listing
 
 

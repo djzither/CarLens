@@ -6,23 +6,17 @@ import json
 from pathlib import Path
 from typing import Any
 
-from src.listings.providers.base import (
-    ListingProvider,
-    incomplete_listing_warnings,
-    is_dirty_title,
-    skipped_listing_warning,
+from src.listings.providers.raw_listing_provider import (
+    RawListingProvider,
+    build_provider_record_from_raw,
+    raw_listing_matches_id,
 )
-from src.listings.providers.provenance import attach_listing_provenance
 from src.listings.providers.types import SearchFilters, SearchResult
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_SAMPLE_PATH = (
     PROJECT_ROOT / "data" / "sample_listings" / "student_listings.json"
 )
-
-
-def _normalize_str(value: Any) -> str:
-    return str(value).strip().casefold()
 
 
 def _listing_from_entry(entry: dict[str, Any]) -> dict[str, Any]:
@@ -32,71 +26,21 @@ def _listing_from_entry(entry: dict[str, Any]) -> dict[str, Any]:
     return entry
 
 
-def _raw_for_validation(entry: dict[str, Any]) -> dict[str, Any]:
-    listing = _listing_from_entry(entry)
-    raw = dict(listing)
+def _raw_from_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    raw = dict(_listing_from_entry(entry))
     entry_id = entry.get("id")
-    if entry_id and not raw.get("id") and not raw.get("listing_id"):
-        raw["id"] = entry_id
+    if entry_id and not raw.get("listing_id"):
+        raw["listing_id"] = str(entry_id)
     return raw
 
 
-def _parse_int(value: Any) -> int | None:
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
+def _entry_matches_id(entry: dict[str, Any], lookup_id: str) -> bool:
+    if str(entry.get("id", "")).strip() == lookup_id.strip():
+        return True
+    return raw_listing_matches_id(_listing_from_entry(entry), lookup_id)
 
 
-def _parse_price(value: Any) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _matches_filters(entry: dict[str, Any], filters: SearchFilters) -> bool:
-    listing = _listing_from_entry(entry)
-
-    if filters.make is not None:
-        if _normalize_str(listing.get("make")) != _normalize_str(filters.make):
-            return False
-
-    if filters.model is not None:
-        if _normalize_str(listing.get("model")) != _normalize_str(filters.model):
-            return False
-
-    year_int = _parse_int(listing.get("year"))
-
-    if filters.min_year is not None:
-        if year_int is None or year_int < filters.min_year:
-            return False
-
-    if filters.max_year is not None:
-        if year_int is None or year_int > filters.max_year:
-            return False
-
-    if filters.max_price is not None:
-        price = _parse_price(listing.get("price"))
-        if price is not None and price > float(filters.max_price):
-            return False
-
-    if filters.max_mileage is not None:
-        mileage = _parse_int(listing.get("mileage"))
-        if mileage is not None and mileage > filters.max_mileage:
-            return False
-
-    if filters.clean_title_only and is_dirty_title(listing):
-        return False
-
-    return True
-
-
-class MockListingProvider(ListingProvider):
+class MockListingProvider(RawListingProvider):
     """Serve listings from a local sample JSON file with optional filters."""
 
     name = "mock"
@@ -126,37 +70,57 @@ class MockListingProvider(ListingProvider):
             raise ValueError(f"{self._data_path.name} must contain a listings array")
         self._entries = [entry for entry in listings if isinstance(entry, dict)]
 
-    def search(self, filters: SearchFilters) -> SearchResult:
-        matched: list[dict[str, Any]] = []
-        warnings: list[str] = []
-
+    def _find_entry(self, provider_listing_id: str) -> dict[str, Any] | None:
         for entry in self._entries:
-            entry_id = str(entry.get("id", "unknown"))
-            raw = _raw_for_validation(entry)
-            valid, validation_errors = self.validate_listing(raw)
-            if not valid:
-                warnings.append(skipped_listing_warning(entry_id, validation_errors))
-                continue
-            if _matches_filters(entry, filters):
-                warnings.extend(incomplete_listing_warnings(entry_id, raw))
-                matched.append(
-                    attach_listing_provenance(entry, provider_name=self.name)
-                )
+            if _entry_matches_id(entry, provider_listing_id):
+                return entry
+        return None
 
+    def count_raw_listings(self) -> int:
+        return len(self._entries)
+
+    def fetch_raw_listings(self, filters: SearchFilters) -> list[dict[str, Any]]:
+        del filters
+        return [_raw_from_entry(entry) for entry in self._entries]
+
+    def fetch_raw_listing_by_id(self, provider_listing_id: str) -> dict[str, Any] | None:
+        entry = self._find_entry(provider_listing_id)
+        if entry is None:
+            return None
+        return _raw_from_entry(entry)
+
+    def search(self, filters: SearchFilters) -> SearchResult:
+        result = super().search(filters)
+        display_by_id = {
+            str(entry.get("id")): entry.get("display_name")
+            for entry in self._entries
+            if entry.get("id")
+        }
+        listings: list[dict[str, Any]] = []
+        for record in result.listings:
+            updated = dict(record)
+            name = display_by_id.get(record["id"])
+            if name and str(name).strip():
+                updated["display_name"] = str(name).strip()
+            listings.append(updated)
         return SearchResult(
-            listings=matched,
-            provider_name=self.name,
-            provider_warnings=warnings,
-            total_available=len(self._entries),
+            listings=listings,
+            provider_name=result.provider_name,
+            provider_warnings=result.provider_warnings,
+            errors=result.errors,
+            total_available=result.total_available,
         )
 
-    def get_by_id(self, listing_id: str) -> dict | None:
-        for entry in self._entries:
-            if entry.get("id") != listing_id:
-                continue
-            raw = _raw_for_validation(entry)
-            valid, _ = self.validate_listing(raw)
-            if valid:
-                return attach_listing_provenance(entry, provider_name=self.name)
+    def get_by_id(self, provider_listing_id: str) -> dict | None:
+        entry = self._find_entry(provider_listing_id)
+        if entry is None:
             return None
-        return None
+        display_name = entry.get("display_name")
+        label = str(display_name).strip() if display_name else None
+        return build_provider_record_from_raw(
+            raw_listing=_raw_from_entry(entry),
+            provider_name=self.name,
+            validate_listing=self.validate_listing,
+            entry_id=str(entry.get("id", provider_listing_id)),
+            display_name=label,
+        )

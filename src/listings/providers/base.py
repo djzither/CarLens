@@ -67,8 +67,8 @@ class ListingProvider(ABC):
         """Return listings matching filters plus any validation errors."""
 
     @abstractmethod
-    def get_by_id(self, listing_id: str) -> dict | None:
-        """Return a single listing record by id, or None if not found."""
+    def get_by_id(self, provider_listing_id: str) -> dict | None:
+        """Return a single listing record by provider id, or None if not found."""
 
     def validate_listing(self, raw: dict[str, Any]) -> tuple[bool, list[str]]:
         """Validate required listing fields before scoring.
