@@ -53,7 +53,7 @@ def test_merge_combines_page_two_results(ugly_payload: dict) -> None:
 
     assert VIN_GOOD in vins
     assert VIN_PAGE_TWO in vins
-    assert len(iter_auto_dev_provider_rows(merged)) == 12
+    assert len(iter_auto_dev_provider_rows(merged)) == 18
 
 
 def test_empty_page_merges_to_zero_rows(ugly_payload: dict) -> None:
