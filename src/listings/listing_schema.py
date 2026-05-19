@@ -15,6 +15,8 @@ LISTING_OPTIONAL = frozenset(
         "source",
         "listing_url",
         "raw_title",
+        "image_url",
+        "distance_miles",
     }
 )
 CANONICAL_LISTING_FIELDS = (
@@ -99,5 +101,11 @@ def validate_listing(listing: Any) -> dict[str, Any]:
         validated["listing_url"] = _require_str(data["listing_url"], "listing.listing_url")
     if "raw_title" in data:
         validated["raw_title"] = _require_str(data["raw_title"], "listing.raw_title")
+    if "image_url" in data:
+        validated["image_url"] = _require_str(data["image_url"], "listing.image_url")
+    if "distance_miles" in data:
+        validated["distance_miles"] = _optional_int(
+            data["distance_miles"], "listing.distance_miles"
+        )
 
     return validated

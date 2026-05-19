@@ -432,4 +432,14 @@ def normalize_listing(listing: dict[str, Any]) -> dict[str, Any]:
         if drive_type:
             normalized["drive_type"] = drive_type.casefold()
 
+    _set_if_present(normalized, "image_url", raw.get("image_url"))
+    if raw.get("distance_miles") is not None and not isinstance(
+        raw.get("distance_miles"), bool
+    ):
+        distance = raw["distance_miles"]
+        if isinstance(distance, int):
+            normalized["distance_miles"] = distance
+        elif isinstance(distance, float) and distance >= 0:
+            normalized["distance_miles"] = int(round(distance))
+
     return validate_listing(normalized)
