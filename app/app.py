@@ -12,6 +12,12 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+# Streamlit loads this file as module "app" when run via `streamlit run app/app.py`,
+# which shadows the `app/` package. Drop a script binding so package imports work.
+_shadowed_app = sys.modules.get("app")
+if _shadowed_app is not None and not hasattr(_shadowed_app, "__path__"):
+    del sys.modules["app"]
+
 import streamlit as st
 
 from app.listing_display import (
@@ -373,6 +379,7 @@ def render_listing_summary(
     listing = entry["listing"]
     raw_listing = entry.get("raw_listing")
     fit = entry["fit"]
+    confidence = entry["confidence"]
     display_label = resolve_listing_display_name(entry, raw_listing)
     checkbox_key = compare_checkbox_key(compare_id)
     is_selected = bool(st.session_state.get(checkbox_key))
