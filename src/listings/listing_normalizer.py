@@ -4,6 +4,7 @@ import re
 from datetime import date
 from functools import lru_cache
 from typing import Any
+from urllib.parse import urlsplit
 
 from src.listings.listing_schema import validate_listing
 from src.vehicles.vehicle_profile_loader import load_vehicle_profiles
@@ -351,6 +352,22 @@ def _set_if_present(target: dict[str, Any], key: str, value: Any) -> None:
     target[key] = value
 
 
+_ALLOWED_IMAGE_URL_SCHEMES = frozenset({"http", "https"})
+
+
+def sanitize_image_url(value: Any) -> str | None:
+    """Return image_url only for safe http(s) URLs."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    scheme = urlsplit(text).scheme.casefold()
+    if scheme not in _ALLOWED_IMAGE_URL_SCHEMES:
+        return None
+    return text
+
+
 def normalize_listing(listing: dict[str, Any]) -> dict[str, Any]:
     """Coerce raw marketplace listings into the canonical listing schema."""
     if not isinstance(listing, dict):
@@ -432,7 +449,9 @@ def normalize_listing(listing: dict[str, Any]) -> dict[str, Any]:
         if drive_type:
             normalized["drive_type"] = drive_type.casefold()
 
-    _set_if_present(normalized, "image_url", raw.get("image_url"))
+    image_url = sanitize_image_url(raw.get("image_url"))
+    if image_url is not None:
+        normalized["image_url"] = image_url
     if raw.get("distance_miles") is not None and not isinstance(
         raw.get("distance_miles"), bool
     ):

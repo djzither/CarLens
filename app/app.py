@@ -49,7 +49,7 @@ from src.listings.listing_ranker import (
     rank_listings_for_recommendations,
 )
 from src.profiles.buyer_profile_loader import load_buyer_profiles
-from app.provider_mock_demo import (
+from provider_mock_demo import (
     PROVIDER_MOCK_BUYER_PROFILE_ID,
     PROVIDER_PIPELINE_STEPS,
     adapt_provider_payloads,

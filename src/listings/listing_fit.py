@@ -159,12 +159,18 @@ def _append_trim_warnings(
 
 
 def score_listing_fit(
-    listing: dict[str, Any],
+    raw_listing: dict[str, Any],
     recommendation: dict[str, Any],
     buyer: dict[str, Any],
+    *,
+    normalized_listing: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Score how well a listing matches a recommendation and buyer constraints."""
-    normalized = normalize_listing(listing)
+    normalized = (
+        normalized_listing
+        if normalized_listing is not None
+        else normalize_listing(raw_listing)
+    )
     selected_year_range = recommendation.get("selected_year_range")
 
     score = 0.0
@@ -304,7 +310,7 @@ def score_listing_fit(
 
     from src.listings.listing_reasons import build_listing_reasons
 
-    structured_reasons = build_listing_reasons(listing, buyer, recommendation)
+    structured_reasons = build_listing_reasons(raw_listing, buyer, recommendation)
 
     fit_result = {
         "fit_score": round(normalized_score, 3),
@@ -318,7 +324,7 @@ def score_listing_fit(
 
     from src.listings.listing_confidence import assess_listing_confidence
 
-    confidence = assess_listing_confidence(listing, normalized, fit=fit_result)
+    confidence = assess_listing_confidence(raw_listing, normalized, fit=fit_result)
     fit_result["confidence"] = confidence
     fit_result["confidence_level"] = confidence["confidence_level"]
     return fit_result

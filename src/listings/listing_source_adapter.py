@@ -127,8 +127,6 @@ def adapt_auto_dev_listing(provider_listing: dict[str, Any]) -> dict[str, Any]:
     vehicle = _nested_dict(provider_listing.get("vehicle"))
     retail = _nested_dict(provider_listing.get("retailListing"))
     wholesale = _nested_dict(provider_listing.get("wholesaleListing"))
-    history = _nested_dict(provider_listing.get("history"))
-
     raw: dict[str, Any] = {"source": AUTO_DEV_SOURCE}
 
     listing_id = _optional_str(provider_listing.get("vin")) or _optional_str(
@@ -179,10 +177,6 @@ def adapt_auto_dev_listing(provider_listing: dict[str, Any]) -> dict[str, Any]:
         retail.get("zip"),
     )
     _set_if_present(raw, "location", location)
-
-    accidents = history.get("accidents")
-    if accidents is False:
-        raw["clean_title"] = True
 
     return raw
 

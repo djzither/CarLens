@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.listings.listing_deduper import (
+    _completeness_rank,
     listings_are_duplicates,
     pick_more_complete_listing,
 )
@@ -36,26 +37,36 @@ def _prepare_listing(listing: dict[str, Any]) -> dict[str, Any]:
 
 
 def _dedupe_prepared_entries(
-    entries: list[tuple[int, str, dict[str, Any]]],
-) -> list[tuple[int, str, dict[str, Any]]]:
+    entries: list[tuple[int, str, dict[str, Any], dict[str, Any]]],
+) -> list[tuple[int, str, dict[str, Any], dict[str, Any]]]:
     """Drop duplicate normalized listings while keeping the most complete record."""
-    kept: list[tuple[int, str, dict[str, Any]]] = []
+    kept: list[tuple[int, str, dict[str, Any], dict[str, Any]]] = []
 
-    for index, listing_name, listing in entries:
+    for index, listing_name, raw_listing, listing in entries:
         duplicate_index: int | None = None
-        for kept_index, (_, _, existing) in enumerate(kept):
+        for kept_index, (_, _, _, existing) in enumerate(kept):
             if listings_are_duplicates(existing, listing):
                 duplicate_index = kept_index
                 break
 
         if duplicate_index is None:
-            kept.append((index, listing_name, listing))
+            kept.append((index, listing_name, raw_listing, listing))
             continue
 
-        prev_index, prev_name, prev_listing = kept[duplicate_index]
-        chosen = pick_more_complete_listing(prev_listing, listing)
-        chosen_name = listing_name if chosen is listing else prev_name
-        kept[duplicate_index] = (min(prev_index, index), chosen_name, chosen)
+        prev_index, prev_name, prev_raw, prev_listing = kept[duplicate_index]
+        chosen_listing = pick_more_complete_listing(prev_listing, listing)
+        if _completeness_rank(listing) >= _completeness_rank(prev_listing):
+            chosen_raw = raw_listing
+            chosen_name = listing_name
+        else:
+            chosen_raw = prev_raw
+            chosen_name = prev_name
+        kept[duplicate_index] = (
+            min(prev_index, index),
+            chosen_name,
+            chosen_raw,
+            chosen_listing,
+        )
 
     return kept
 
@@ -64,7 +75,7 @@ def prepare_listings_for_ranking(
     listings: list[tuple[str, dict[str, Any]]],
 ) -> dict[str, Any]:
     """Normalize and dedupe raw marketplace listings before ranking."""
-    prepared_entries: list[tuple[int, str, dict[str, Any]]] = []
+    prepared_entries: list[tuple[int, str, dict[str, Any], dict[str, Any]]] = []
     invalid_listings: list[dict[str, Any]] = []
 
     for index, (listing_name, raw_listing) in enumerate(listings):
@@ -79,7 +90,7 @@ def prepare_listings_for_ranking(
                 }
             )
             continue
-        prepared_entries.append((index, listing_name, listing))
+        prepared_entries.append((index, listing_name, raw_listing, listing))
 
     deduped_entries = _dedupe_prepared_entries(prepared_entries)
 
@@ -199,15 +210,19 @@ def rank_listings_for_recommendations(
     invalid_listings = prepared["invalid_listings"]
 
     lookup = _recommendation_lookup(recommendations)
-    buckets: dict[tuple[str, str], list[tuple[int, str, dict[str, Any]]]] = {}
-    unmatched_entries: list[tuple[int, str, dict[str, Any]]] = []
+    buckets: dict[
+        tuple[str, str], list[tuple[int, str, dict[str, Any], dict[str, Any]]]
+    ] = {}
+    unmatched_entries: list[tuple[int, str, dict[str, Any], dict[str, Any]]] = []
 
-    for index, listing_name, listing in prepared["prepared_entries"]:
+    for index, listing_name, raw_listing, listing in prepared["prepared_entries"]:
         key = _listing_model_key(listing)
         if key in lookup:
-            buckets.setdefault(key, []).append((index, listing_name, listing))
+            buckets.setdefault(key, []).append(
+                (index, listing_name, raw_listing, listing)
+            )
         else:
-            unmatched_entries.append((index, listing_name, listing))
+            unmatched_entries.append((index, listing_name, raw_listing, listing))
 
     groups: list[dict[str, Any]] = []
     for recommendation_rank, recommendation in enumerate(recommendations, start=1):
@@ -215,8 +230,13 @@ def rank_listings_for_recommendations(
         bucket = buckets.get(key, [])
 
         scored: list[tuple[int, str, dict[str, Any], dict[str, Any]]] = []
-        for index, listing_name, listing in bucket:
-            fit = score_listing_fit(listing, recommendation, buyer)
+        for index, listing_name, raw_listing, listing in bucket:
+            fit = score_listing_fit(
+                raw_listing,
+                recommendation,
+                buyer,
+                normalized_listing=listing,
+            )
             scored.append((index, listing_name, listing, fit))
 
         group: dict[str, Any] = {
@@ -237,7 +257,9 @@ def rank_listings_for_recommendations(
             "listing": listing,
             "fit": _unmatched_fit(listing),
         }
-        for _, listing_name, listing in sorted(unmatched_entries, key=lambda item: item[0])
+        for _, listing_name, _, listing in sorted(
+            unmatched_entries, key=lambda item: item[0]
+        )
     ]
 
     return {

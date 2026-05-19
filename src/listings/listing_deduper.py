@@ -108,7 +108,7 @@ def _values_within_tolerance(
 
 def _similar_price(left: int | None, right: int | None) -> bool:
     if left is None or right is None:
-        return False
+        return True
     return _values_within_tolerance(
         left,
         right,
@@ -119,13 +119,31 @@ def _similar_price(left: int | None, right: int | None) -> bool:
 
 def _similar_mileage(left: int | None, right: int | None) -> bool:
     if left is None or right is None:
-        return False
+        return True
     return _values_within_tolerance(
         left,
         right,
         absolute=_MILEAGE_TOLERANCE_MILES,
         ratio=_MILEAGE_TOLERANCE_RATIO,
     )
+
+
+_DISPLAY_PASSTHROUGH_FIELDS = ("image_url", "distance_miles")
+
+
+def merge_display_fields(
+    primary: dict[str, Any],
+    secondary: dict[str, Any],
+) -> dict[str, Any]:
+    """Fill missing display fields on the primary listing from a duplicate."""
+    merged = dict(primary)
+    for key in _DISPLAY_PASSTHROUGH_FIELDS:
+        if merged.get(key) is not None:
+            continue
+        value = secondary.get(key)
+        if value is not None:
+            merged[key] = value
+    return merged
 
 
 def _completeness_rank(listing: dict[str, Any]) -> tuple[int, int]:
@@ -138,6 +156,10 @@ def _completeness_rank(listing: dict[str, Any]) -> tuple[int, int]:
         score += 1
     if _norm_text(listing.get("listing_url")):
         score += 1
+    if _norm_text(listing.get("image_url")):
+        score += 1
+    if listing.get("distance_miles") is not None:
+        score += 1
     title = _listing_title(listing) or ""
     return score, len(title)
 
@@ -148,8 +170,8 @@ def pick_more_complete_listing(
 ) -> dict[str, Any]:
     """Return the listing with more usable fields for scoring and display."""
     if _completeness_rank(right) > _completeness_rank(left):
-        return right
-    return left
+        return merge_display_fields(right, left)
+    return merge_display_fields(left, right)
 
 
 def _same_vehicle_identity(left: dict[str, Any], right: dict[str, Any]) -> bool:

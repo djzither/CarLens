@@ -34,7 +34,6 @@ def test_duplicate_url_is_deduped():
     result = dedupe_listings([sparse, complete])
 
     assert len(result) == 1
-    assert result[0] is complete
     assert result[0]["price"] == 10500
     assert result[0]["mileage"] == 92000
 
@@ -56,7 +55,6 @@ def test_duplicate_source_and_listing_id_is_deduped():
     result = dedupe_listings([sparse, complete])
 
     assert len(result) == 1
-    assert result[0] is complete
     assert result[0]["listing_url"] == "https://example.com/listing/abc123"
 
 
@@ -112,13 +110,75 @@ def test_keep_most_complete_record():
         raw_title="2016 Toyota Corolla LE clean title 92k miles with full details",
     )
 
-    assert pick_more_complete_listing(sparse, complete) is complete
+    chosen = pick_more_complete_listing(sparse, complete)
+    assert chosen["listing_url"] == complete["listing_url"]
+    assert len(chosen["raw_title"]) > len("Corolla")
 
     result = dedupe_listings([sparse, complete])
 
     assert len(result) == 1
-    assert result[0] is complete
+    assert result[0]["listing_url"] == "https://example.com/listing/complete"
     assert len(result[0]["raw_title"]) > len("Corolla")
+
+
+def test_same_car_deduped_when_one_price_missing():
+    sparse = _corolla_base(
+        price=None,
+        raw_title="2016 Toyota Corolla LE clean title 92k miles",
+        listing_url="https://example.com/listing/sparse",
+    )
+    complete = _corolla_base(
+        price=10500,
+        raw_title="2016 Toyota Corolla LE clean title 92k miles",
+        listing_url="https://example.com/listing/complete",
+    )
+
+    result = dedupe_listings([sparse, complete])
+
+    assert len(result) == 1
+    assert result[0]["price"] == 10500
+
+
+def test_same_car_deduped_when_one_mileage_missing():
+    sparse = _corolla_base(
+        mileage=None,
+        raw_title="2016 Toyota Corolla LE clean title 92k miles",
+    )
+    complete = _corolla_base(
+        mileage=92000,
+        raw_title="2016 Toyota Corolla LE clean title 92k miles",
+        listing_url="https://example.com/listing/complete",
+    )
+
+    result = dedupe_listings([sparse, complete])
+
+    assert len(result) == 1
+    assert result[0]["mileage"] == 92000
+
+
+def test_dedupe_preserves_display_fields_from_duplicate():
+    sparse = _corolla_base(
+        price=10500,
+        mileage=92000,
+        listing_url="https://example.com/listing/sparse",
+        raw_title="2016 Toyota Corolla LE clean title 92k miles",
+    )
+    rich_display = _corolla_base(
+        price=None,
+        mileage=None,
+        listing_url="https://example.com/listing/sparse",
+        raw_title="2016 Toyota Corolla LE clean title 92k miles",
+        image_url="https://photos.example/corolla.jpg",
+        distance_miles=12,
+    )
+
+    result = dedupe_listings([sparse, rich_display])
+
+    assert len(result) == 1
+    assert result[0]["price"] == 10500
+    assert result[0]["mileage"] == 92000
+    assert result[0]["image_url"] == "https://photos.example/corolla.jpg"
+    assert result[0]["distance_miles"] == 12
 
 
 def test_duplicate_url_ignores_tracking_query_params():

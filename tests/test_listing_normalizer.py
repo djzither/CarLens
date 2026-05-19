@@ -13,6 +13,7 @@ from src.listings.listing_normalizer import (
     normalize_listing,
     parse_mileage,
     parse_price,
+    sanitize_image_url,
 )
 from src.listings.listing_schema import CANONICAL_LISTING_FIELDS
 
@@ -318,6 +319,30 @@ def test_normalize_marketplace_style_title_extraction():
 
 def test_extract_trim_corolla_le():
     assert extract_trim("2016 Toyota Corolla LE clean title", "Toyota", "Corolla") == "LE"
+
+@pytest.mark.parametrize(
+    ("image_url", "expected"),
+    [
+        ("https://photos.example/car.jpg", "https://photos.example/car.jpg"),
+        ("http://photos.example/car.jpg", "http://photos.example/car.jpg"),
+        ("javascript:alert(1)", None),
+        ("data:image/png;base64,abc", None),
+        ("file:///etc/passwd", None),
+    ],
+)
+def test_sanitize_image_url_scheme(image_url, expected):
+    assert sanitize_image_url(image_url) == expected
+
+
+def test_normalize_drops_unsafe_image_url():
+    listing = _base(image_url="javascript:alert(1)")
+    assert "image_url" not in normalize_listing(listing)
+
+
+def test_normalize_keeps_https_image_url():
+    listing = _base(image_url="https://photos.example/car.jpg")
+    assert normalize_listing(listing)["image_url"] == "https://photos.example/car.jpg"
+
 
 def test_missing_helper_inputs_do_not_crash():
     assert parse_price("") is None

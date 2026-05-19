@@ -693,3 +693,37 @@ def test_canonical_listing_preserved_in_ranked_output():
     _, listing, _ = _rank_single_raw(structured, listing_name="canonical_corolla")
 
     assert listing == expected
+
+
+def test_title_only_listing_low_confidence_through_ranker():
+    """Ranker must pass original raw listing into confidence assessment."""
+    buyer_profile_id, _ = _load_sample_listings()
+    buyer = _buyer(buyer_profile_id)
+    recommendations = recommend(buyer_profile_id)["recommendations"]
+    corolla_rec = next(
+        rec
+        for rec in recommendations
+        if rec["make"] == "Toyota" and rec["model"] == "Corolla"
+    )
+
+    ranked = rank_listings_for_recommendations(
+        [
+            (
+                "title_only_corolla",
+                {
+                    "title": "2016 Toyota Corolla LE 92k miles",
+                    "listing_url": "https://example.com/sparse",
+                },
+            )
+        ],
+        [corolla_rec],
+        buyer,
+    )
+
+    corolla_group = next(
+        group
+        for group in ranked["groups"]
+        if group["make"] == "Toyota" and group["model"] == "Corolla"
+    )
+    assert corolla_group["listings"]
+    assert corolla_group["listings"][0]["fit"]["confidence_level"] == "Low"

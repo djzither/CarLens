@@ -194,3 +194,15 @@ def test_client_parsers_use_adapter_without_network():
 def test_adapter_rejects_non_object():
     with pytest.raises(ValueError):
         adapt_auto_dev_listing("not-a-dict")
+
+
+def test_accidents_false_does_not_set_clean_title():
+    raw = adapt_auto_dev_listing(
+        {
+            "vin": "VIN123",
+            "vehicle": {"year": 2016, "make": "Toyota", "model": "Corolla"},
+            "retailListing": {"price": 10500, "miles": 92000},
+            "history": {"accidents": False},
+        }
+    )
+    assert "clean_title" not in raw
