@@ -12,7 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.listings.listing_ranker import rank_listings_by_recommendation
-from src.listings.providers import MockListingProvider
+from src.listings.providers import MockListingProvider, SearchFilters
 from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.recommendation_engine import recommend
 
@@ -23,7 +23,7 @@ def load_sample_listings(
     path: Path = SAMPLE_LISTINGS_PATH,
 ) -> tuple[str, list[tuple[str, dict[str, Any]]], dict[str, str]]:
     provider = MockListingProvider(path)
-    entries = provider.search_listings()
+    entries = provider.search(SearchFilters()).listings
     buyer_profile_id = provider.buyer_profile_id
     scenarios: list[tuple[str, dict[str, Any]]] = []
     display_names: dict[str, str] = {}

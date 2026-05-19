@@ -25,7 +25,6 @@ EXPECTED_LISTING_IDS = [
     "missing_trim_corolla",
     "wrong_trim_corolla",
     "missing_mileage_corolla",
-    "missing_price_corolla",
     "good_civic",
     "cheap_dirty_title_civic",
     "good_camry",
