@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.listings.provider_clean_title import apply_explicit_clean_title
+
 AUTO_DEV_SOURCE = "auto.dev"
 MARKETCHECK_SOURCE = "marketcheck"
 
@@ -235,9 +237,7 @@ def adapt_marketcheck_listing(provider_listing: dict[str, Any]) -> dict[str, Any
     location = _format_location(dealer.get("city"), dealer.get("state"), dealer.get("zip"))
     _set_if_present(raw, "location", location)
 
-    clean_title = provider_listing.get("carfax_clean_title")
-    if isinstance(clean_title, bool):
-        raw["clean_title"] = clean_title
+    apply_explicit_clean_title(raw, provider_listing.get("carfax_clean_title"))
 
     return raw
 
