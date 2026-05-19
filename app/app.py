@@ -35,7 +35,12 @@ from listing_display import (
     format_compact_listing_header,
     format_confidence_breakdown,
     format_listing_card_tagline,
+    format_listing_data_details_lines,
+    format_listing_quality_badge_lines,
+    format_listing_quality_metrics,
+    format_listing_quality_warning_lines,
     format_listing_source_markdown,
+    resolve_listing_quality_summary,
     format_positive_reasons_for_display,
     format_recommended_because,
     format_summary_badge_line,
@@ -432,6 +437,12 @@ def render_listing_summary(
                 is_budget_option=is_budget_option,
             )
         )
+        quality = resolve_listing_quality_summary(entry)
+        st.markdown(format_listing_quality_metrics(quality))
+        for badge in format_listing_quality_badge_lines(quality, limit=3):
+            st.markdown(f"✓ {badge}")
+        for warning in format_listing_quality_warning_lines(quality, limit=3):
+            st.markdown(f"- {warning}")
         scoring_reasons = format_card_scoring_reasons(fit)
         if scoring_reasons:
             st.markdown("**Why this score**")
@@ -491,6 +502,10 @@ def render_listing_summary(
         listing_has_missing_price(listing) or listing_has_missing_mileage(listing)
     ):
         st.markdown("- None")
+
+    with st.expander("Listing data details"):
+        for line in format_listing_data_details_lines(quality):
+            st.markdown(f"- {line}")
 
     with st.expander("Scoring breakdown"):
         st.markdown(f"- Fit label: {fit.get('fit_label', '—')}")

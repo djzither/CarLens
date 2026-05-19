@@ -834,3 +834,126 @@ def format_confidence_breakdown(confidence: dict[str, Any]) -> list[tuple[str, s
 
 def build_ranking_explanation_lines() -> list[str]:
     return list(RANKING_ORDER_LINES)
+
+
+_FIT_QUALITY_LABELS: dict[str, str] = {
+    "strong": "Strong",
+    "moderate": "Moderate",
+    "weak": "Weak",
+}
+
+_DATA_QUALITY_LABELS: dict[str, str] = {
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low",
+}
+
+_TITLE_CERTAINTY_LABELS: dict[str, str] = {
+    "clean": "Clean",
+    "dirty": "Issue reported",
+    "unknown": "Unknown",
+}
+
+
+def build_provider_record_for_quality(entry: dict[str, Any]) -> dict[str, Any]:
+    """Build a provider-style record for :func:`build_listing_quality_summary`."""
+    from src.listings.providers.provenance import present_field_names
+
+    listing = entry.get("listing") or {}
+    raw = entry.get("raw_listing") or listing
+    provider_name = (
+        entry.get("provider_name")
+        or entry.get("provider")
+        or listing.get("source")
+        or "unknown"
+    )
+    raw_fields = entry.get("provider_raw_fields")
+    if not isinstance(raw_fields, list):
+        raw_fields = present_field_names(raw if isinstance(raw, dict) else listing)
+    return {
+        "id": entry.get("listing_name", ""),
+        "listing": listing,
+        "provider_name": str(provider_name),
+        "provider_listing_id": str(
+            entry.get("provider_listing_id") or entry.get("listing_name", "")
+        ),
+        "provider_raw_fields": list(raw_fields),
+    }
+
+
+def resolve_listing_quality_summary(entry: dict[str, Any]) -> dict[str, Any]:
+    """Compute fit vs data quality summary for a ranked listing card."""
+    from src.listings.listing_quality_summary import (
+        ListingQualityWarningsContext,
+        build_listing_quality_summary,
+    )
+
+    record = build_provider_record_for_quality(entry)
+    provider_warnings = entry.get("provider_warnings")
+    ctx = ListingQualityWarningsContext(
+        provider_warnings=list(provider_warnings)
+        if isinstance(provider_warnings, list)
+        else []
+    )
+    return build_listing_quality_summary(
+        record,
+        fit=entry.get("fit"),
+        warnings_context=ctx,
+    )
+
+
+def format_provider_name_label(provider_name: str) -> str:
+    key = str(provider_name).strip()
+    if not key or key == "unknown":
+        return "Unknown"
+    return _SOURCE_LABELS.get(key, key.replace("_", " ").title())
+
+
+def format_listing_quality_metrics(summary: dict[str, Any]) -> str:
+    """Single compact line: source, fit, data quality, title."""
+    fit = _FIT_QUALITY_LABELS.get(str(summary.get("fit_quality", "")), "—")
+    data = _DATA_QUALITY_LABELS.get(str(summary.get("data_quality_level", "")), "—")
+    title = _TITLE_CERTAINTY_LABELS.get(str(summary.get("title_certainty", "")), "—")
+    source = format_provider_name_label(str(summary.get("source", "")))
+    return f"**Source:** {source} · **Fit:** {fit} · **Data quality:** {data} · **Title:** {title}"
+
+
+def format_listing_quality_badge_lines(
+    summary: dict[str, Any],
+    *,
+    limit: int = 3,
+) -> list[str]:
+    badges = summary.get("badges") or []
+    return [str(item) for item in badges[:limit] if str(item).strip()]
+
+
+def format_listing_quality_warning_lines(
+    summary: dict[str, Any],
+    *,
+    limit: int = 3,
+) -> list[str]:
+    warnings = summary.get("warnings") or []
+    return [str(item) for item in warnings[:limit] if str(item).strip()]
+
+
+def format_listing_data_details_lines(summary: dict[str, Any]) -> list[str]:
+    """Expander copy: completeness and field coverage (not raw provenance)."""
+    completeness = float(summary.get("data_completeness", 0.0))
+    pct = int(round(completeness * 100))
+    title = _TITLE_CERTAINTY_LABELS.get(str(summary.get("title_certainty", "")), "—")
+    lines = [
+        f"Data completeness: {pct}%",
+        f"Title certainty: {title}",
+    ]
+    provided = summary.get("provided_fields") or []
+    unavailable = summary.get("unavailable_fields") or []
+    if provided:
+        lines.append(f"Provided: {', '.join(str(f) for f in provided)}")
+    if unavailable:
+        lines.append(f"Unavailable: {', '.join(str(f) for f in unavailable)}")
+    data_level = _DATA_QUALITY_LABELS.get(
+        str(summary.get("data_quality_level", "")),
+        "—",
+    )
+    lines.append(f"Data quality level: {data_level}")
+    return lines

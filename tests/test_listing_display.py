@@ -21,8 +21,13 @@ from app.listing_display import (
     format_card_scoring_reasons,
     format_compact_listing_header,
     format_listing_card_tagline,
+    format_listing_data_details_lines,
     format_listing_facts,
+    format_listing_quality_badge_lines,
+    format_listing_quality_metrics,
+    format_listing_quality_warning_lines,
     format_listing_source_markdown,
+    resolve_listing_quality_summary,
     format_mileage,
     format_positive_reason_display,
     format_positive_reasons_for_display,
@@ -404,3 +409,102 @@ def test_format_listing_card_tagline_for_top_pick():
     tagline = format_listing_card_tagline(entry, rank=1)
     assert "top overall" in tagline.casefold()
     assert len(tagline) > 20
+
+
+def test_format_listing_quality_metrics_separates_fit_and_data() -> None:
+    entry = _strong_entry()
+    entry["listing"]["source"] = "mock"
+    entry["provider_name"] = "mock"
+    entry["provider_raw_fields"] = [
+        "make",
+        "model",
+        "year",
+        "price",
+        "mileage",
+        "clean_title",
+    ]
+    summary = resolve_listing_quality_summary(entry)
+    metrics = format_listing_quality_metrics(summary)
+
+    assert "**Source:** Mock" in metrics
+    assert "**Fit:** Strong" in metrics
+    assert "**Data quality:** High" in metrics
+    assert "**Title:** Clean" in metrics
+
+
+def test_strong_fit_medium_data_quality_on_card_entry() -> None:
+    entry = _strong_entry()
+    entry["listing"].pop("clean_title", None)
+    entry["provider_raw_fields"] = [
+        "make",
+        "model",
+        "year",
+        "price",
+        "mileage",
+    ]
+    summary = resolve_listing_quality_summary(entry)
+
+    assert summary["fit_quality"] == "strong"
+    assert summary["data_quality_level"] == "medium"
+    assert summary["title_certainty"] == "unknown"
+
+
+def test_weak_fit_high_data_quality_on_card_entry() -> None:
+    entry = _strong_entry()
+    entry["fit"]["fit_label"] = "Weak fit"
+    entry["provider_raw_fields"] = [
+        "make",
+        "model",
+        "year",
+        "price",
+        "mileage",
+        "clean_title",
+    ]
+    summary = resolve_listing_quality_summary(entry)
+
+    assert summary["fit_quality"] == "weak"
+    assert summary["data_quality_level"] == "high"
+
+
+def test_listing_quality_warnings_dirty_vs_unknown() -> None:
+    dirty = _strong_entry(clean_title=False)
+    dirty["provider_raw_fields"] = ["make", "model", "year", "price", "mileage"]
+    unknown = _strong_entry()
+    unknown["listing"].pop("clean_title", None)
+    unknown["provider_raw_fields"] = ["make", "model", "year", "price", "mileage"]
+
+    dirty_warnings = format_listing_quality_warning_lines(
+        resolve_listing_quality_summary(dirty),
+        limit=3,
+    )
+    unknown_warnings = format_listing_quality_warning_lines(
+        resolve_listing_quality_summary(unknown),
+        limit=3,
+    )
+
+    assert len(dirty_warnings) == 1
+    assert len(unknown_warnings) == 1
+    assert "Title history unavailable" in unknown_warnings[0]
+    assert "dirty title" not in unknown_warnings[0].casefold()
+    assert len(dirty_warnings[0]) > len(unknown_warnings[0])
+
+
+def test_listing_quality_badges_capped_at_three() -> None:
+    summary = {
+        "badges": ["A", "B", "C", "D"],
+        "warnings": [],
+    }
+    assert format_listing_quality_badge_lines(summary, limit=3) == ["A", "B", "C"]
+
+
+def test_listing_data_details_omits_raw_provenance() -> None:
+    entry = _strong_entry()
+    entry["provider_raw_fields"] = ["make", "model", "year", "price", "mileage"]
+    entry["provider_warnings"] = ["mock: skipped — missing listing id"]
+    lines = format_listing_data_details_lines(resolve_listing_quality_summary(entry))
+    joined = "\n".join(lines)
+
+    assert "provider_raw_fields" not in joined
+    assert "skipped" not in joined
+    assert "Provided:" in joined
+    assert "Data completeness:" in joined
