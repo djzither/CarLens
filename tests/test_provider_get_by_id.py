@@ -11,6 +11,7 @@ from src.listings.providers import (
     AutoDevProvider,
     MarketcheckProvider,
     MockListingProvider,
+    validate_provider_listing_record,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -91,3 +92,74 @@ def test_auto_dev_get_by_id_uses_listing_id(auto_dev: AutoDevProvider) -> None:
     assert record is not None
     assert record["provider_listing_id"] == AUTO_DEV_VIN
     assert record["listing"]["source"] == "auto.dev"
+
+
+def test_auto_dev_get_by_id_found_listing(auto_dev: AutoDevProvider) -> None:
+    record = auto_dev.get_by_id(AUTO_DEV_VIN)
+    assert record is not None
+    assert record["id"] == AUTO_DEV_VIN
+    assert record["listing"]["make"] == "Toyota"
+    assert record["listing"]["model"] == "Corolla"
+
+
+def test_auto_dev_get_by_id_unknown_id_returns_none(auto_dev: AutoDevProvider) -> None:
+    assert auto_dev.get_by_id("UNKNOWN_VIN_NOT_IN_FIXTURE") is None
+
+
+def test_marketcheck_get_by_id_found_listing(
+    marketcheck: MarketcheckProvider,
+) -> None:
+    record = marketcheck.get_by_id(MARKETCHECK_ID)
+    assert record is not None
+    assert record["id"] == MARKETCHECK_ID
+    assert record["listing"]["make"] == "Honda"
+    assert record["listing"]["model"] == "Civic"
+
+
+def test_marketcheck_get_by_id_unknown_id_returns_none(
+    marketcheck: MarketcheckProvider,
+) -> None:
+    assert marketcheck.get_by_id("mc-not-in-fixture") is None
+
+
+@pytest.mark.parametrize(
+    ("provider_fixture", "listing_id", "provider_name"),
+    [
+        ("auto_dev", AUTO_DEV_VIN, "auto.dev"),
+        ("marketcheck", MARKETCHECK_ID, "marketcheck"),
+    ],
+)
+def test_fixture_providers_get_by_id_attaches_provenance(
+    provider_fixture: str,
+    listing_id: str,
+    provider_name: str,
+    auto_dev: AutoDevProvider,
+    marketcheck: MarketcheckProvider,
+) -> None:
+    provider = auto_dev if provider_fixture == "auto_dev" else marketcheck
+    record = provider.get_by_id(listing_id)
+    assert record is not None
+    assert record["provider_name"] == provider_name
+    assert record["provider_listing_id"] == listing_id
+    assert isinstance(record["provider_raw_fields"], list)
+    assert record["provider_raw_fields"]
+
+
+@pytest.mark.parametrize(
+    ("provider_fixture", "listing_id"),
+    [
+        ("auto_dev", AUTO_DEV_VIN),
+        ("marketcheck", MARKETCHECK_ID),
+    ],
+)
+def test_fixture_providers_get_by_id_passes_record_validation(
+    provider_fixture: str,
+    listing_id: str,
+    auto_dev: AutoDevProvider,
+    marketcheck: MarketcheckProvider,
+) -> None:
+    provider = auto_dev if provider_fixture == "auto_dev" else marketcheck
+    record = provider.get_by_id(listing_id)
+    assert record is not None
+    ok, errors = validate_provider_listing_record(record)
+    assert ok, errors
