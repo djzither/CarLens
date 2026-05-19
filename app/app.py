@@ -22,36 +22,33 @@ for directory in (APP_DIR, PROJECT_ROOT):
 import streamlit as st
 
 from listing_display import (
-    DIRTY_TITLE_BANNER,
-    STRONG_FIT_LOW_CONFIDENCE_CAPTION,
-    STRONG_FIT_LOW_CONFIDENCE_HEADLINE,
-    WATCHOUT_MISSING_MILEAGE,
-    WATCHOUT_MISSING_PRICE,
+    ListingCardAlert,
+    UNMATCHED_SECTION_INTRO,
+    banner_alerts,
     budget_option_listing_names,
+    build_listing_card_alerts,
     build_ranking_explanation_lines,
     build_watchouts,
+    format_additional_notes_label,
     format_card_fit_summary,
     format_card_scoring_reasons,
     format_compact_listing_header,
     format_confidence_breakdown,
     format_listing_card_tagline,
     format_listing_data_details_lines,
-    format_listing_quality_badge_lines,
     format_listing_quality_metrics,
-    format_listing_quality_warning_lines,
     format_listing_source_markdown,
-    resolve_listing_quality_summary,
     format_positive_reasons_for_display,
     format_recommended_because,
     format_summary_badge_line,
-    listing_has_missing_mileage,
-    listing_has_missing_price,
+    format_title_status_block,
+    filter_watchouts_for_card,
     qualifies_as_top_pick,
     resolve_listing_display_name,
+    resolve_listing_quality_summary,
     resolve_listing_summary_badge,
-    shows_strong_fit_low_confidence_warning,
+    title_status_alert,
     top_pick_banner_text,
-    UNMATCHED_SECTION_INTRO,
 )
 from src.listings.listing_compare import (
     COMPARE_TABLE_ROWS,
@@ -371,6 +368,36 @@ def build_compare_catalog(
     return catalog
 
 
+def _render_card_alert(alert: ListingCardAlert) -> None:
+    if alert.detail:
+        body = f"{alert.headline}\n\n{alert.detail}"
+    else:
+        body = alert.headline
+    if alert.tier == "red":
+        st.error(body)
+    elif alert.tier == "yellow":
+        st.warning(body)
+    else:
+        st.info(body)
+
+
+def _render_title_status(alert: ListingCardAlert) -> None:
+    certainty = alert.group.removeprefix("title_") if alert.group.startswith("title_") else ""
+    block = format_title_status_block(certainty)
+    if not block:
+        block = (
+            alert.headline
+            if not alert.detail
+            else f"{alert.headline}\n\n_{alert.detail}_"
+        )
+    if alert.tier == "red":
+        st.error(block)
+    elif alert.tier == "yellow":
+        st.warning(block)
+    else:
+        st.success(block)
+
+
 def _fit_badge_color(fit_label: str) -> str:
     if fit_label == "Strong fit":
         return "#1b7f3a"
@@ -397,20 +424,24 @@ def render_listing_summary(
     is_selected = bool(st.session_state.get(checkbox_key))
     at_limit = selected_count >= MAX_COMPARE_LISTINGS and not is_selected
 
-    if listing.get("clean_title") is False:
-        st.error(DIRTY_TITLE_BANNER)
-    if listing_has_missing_price(listing):
-        st.warning(WATCHOUT_MISSING_PRICE)
-    if listing_has_missing_mileage(listing):
-        st.warning(WATCHOUT_MISSING_MILEAGE)
-    if shows_strong_fit_low_confidence_warning(fit, confidence):
-        st.warning(STRONG_FIT_LOW_CONFIDENCE_HEADLINE)
-        st.caption(STRONG_FIT_LOW_CONFIDENCE_CAPTION)
+    quality = resolve_listing_quality_summary(entry)
+    alerts = build_listing_card_alerts(
+        entry,
+        quality_summary=quality,
+        confidence=confidence,
+        fit=fit,
+        listing=listing,
+        raw_listing=raw_listing,
+    )
+
+    for alert in banner_alerts(alerts):
+        _render_card_alert(alert)
 
     badge = resolve_listing_summary_badge(
         entry,
         rank=rank,
         is_budget_option=is_budget_option,
+        alerts=alerts,
     )
     badge_line = format_summary_badge_line(badge)
     if badge_line:
@@ -437,12 +468,13 @@ def render_listing_summary(
                 is_budget_option=is_budget_option,
             )
         )
-        quality = resolve_listing_quality_summary(entry)
         st.markdown(format_listing_quality_metrics(quality))
-        for badge in format_listing_quality_badge_lines(quality, limit=3):
-            st.markdown(f"✓ {badge}")
-        for warning in format_listing_quality_warning_lines(quality, limit=3):
-            st.markdown(f"- {warning}")
+        title_alert = title_status_alert(alerts)
+        if title_alert is not None:
+            _render_title_status(title_alert)
+        for alert in alerts:
+            if alert.tier == "info" and not alert.group.startswith("title_"):
+                _render_card_alert(alert)
         scoring_reasons = format_card_scoring_reasons(fit)
         if scoring_reasons:
             st.markdown("**Why this score**")
@@ -493,15 +525,16 @@ def render_listing_summary(
 
     st.markdown("**Watchouts**")
     watchouts = build_watchouts(fit, listing, raw_listing=raw_listing)
-    prominent = {WATCHOUT_MISSING_PRICE, WATCHOUT_MISSING_MILEAGE}
-    remaining = [item for item in watchouts if item not in prominent]
-    if remaining:
-        for item in remaining:
+    visible, overflow = filter_watchouts_for_card(watchouts, alerts)
+    if visible:
+        for item in visible:
             st.markdown(f"- {item}")
-    elif not (
-        listing_has_missing_price(listing) or listing_has_missing_mileage(listing)
-    ):
+    elif not overflow:
         st.markdown("- None")
+    if overflow:
+        with st.expander(format_additional_notes_label(len(overflow))):
+            for item in overflow:
+                st.markdown(f"- {item}")
 
     with st.expander("Listing data details"):
         for line in format_listing_data_details_lines(quality):

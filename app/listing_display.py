@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
 from src.listings.listing_fit import (
     DIRTY_TITLE_WARNING,
@@ -62,6 +63,28 @@ DIRTY_TITLE_BANNER = WATCHOUT_VERIFY_TITLE
 SELLER_TITLE_CONFLICT_WARNING = format_caution_warning(
     "Seller title/description conflict — verify title before purchase"
 )
+
+TITLE_DIRTY_HEADLINE = "🚨 Branded/dirty title reported"
+TITLE_DIRTY_DETAIL = "May significantly affect resale and financing"
+TITLE_UNKNOWN_HEADLINE = "⚠️ Title history unavailable"
+TITLE_UNKNOWN_DETAIL = "Ask seller for title documentation"
+TITLE_CLEAN_HEADLINE = "✅ Clean title verified"
+
+AlertTier = Literal["red", "yellow", "info"]
+MAX_WATCHOUTS_VISIBLE = 4
+
+_INFO_MILEAGE_INFERRED = "ℹ️ Mileage inferred from listing text"
+_INFO_PROVIDER_LIMITED = "ℹ️ Limited provider data — verify key fields independently"
+
+
+@dataclass(frozen=True)
+class ListingCardAlert:
+    """One deduplicated buyer-facing alert on a listing card."""
+
+    tier: AlertTier
+    group: str
+    headline: str
+    detail: str | None = None
 
 _WATCHOUT_DEDUPE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
@@ -599,6 +622,225 @@ def build_watchouts(
     return _dedupe_watchouts(candidates)
 
 
+def _resolve_trust_explanation(confidence: dict[str, Any]) -> str:
+    """Short parenthetical reason for the trust level (data quality only)."""
+    level = confidence.get("confidence_level")
+    missing = list(confidence.get("missing_fields") or [])
+    inferred = list(confidence.get("inferred_fields") or [])
+
+    if level == "High" and not missing and not inferred:
+        return "all core fields provided"
+    if level == "Low" and len(missing) >= 2:
+        return "multiple missing fields"
+    if "clean_title" in missing:
+        return "title unavailable"
+    if "mileage" in inferred:
+        return "mileage inferred"
+    if "price" in inferred:
+        return "price inferred"
+    if confidence.get("ambiguity_detected"):
+        return "unclear mileage in listing text"
+    if confidence.get("mileage_conflict_detected"):
+        return "mileage mismatch"
+    if confidence.get("conflicting_signals"):
+        return "mixed positive and negative signals"
+    if missing:
+        return f"{str(missing[0]).replace('_', ' ')} unavailable"
+    if inferred:
+        return f"{str(inferred[0]).replace('_', ' ')} inferred"
+    if level == "Medium":
+        return "some listing details missing or inferred"
+    if level == "Low":
+        return "multiple listing gaps"
+    return "review listing details"
+
+
+def format_trust_with_explanation(confidence: dict[str, Any]) -> str:
+    level = str(confidence.get("confidence_level", "Low"))
+    return f"{level} trust ({_resolve_trust_explanation(confidence)})"
+
+
+def format_title_status_block(title_certainty: str) -> str | None:
+    """Dedicated title-state copy (shown once on the card)."""
+    if title_certainty == "clean":
+        return f"**{TITLE_CLEAN_HEADLINE}**"
+    if title_certainty == "dirty":
+        return f"**{TITLE_DIRTY_HEADLINE}**\n\n_{TITLE_DIRTY_DETAIL}_"
+    if title_certainty == "unknown":
+        return f"**{TITLE_UNKNOWN_HEADLINE}**\n\n_{TITLE_UNKNOWN_DETAIL}_"
+    return None
+
+
+def title_certainty_from_listing(listing: dict[str, Any]) -> str:
+    clean = listing.get("clean_title")
+    if clean is True:
+        return "clean"
+    if clean is False:
+        return "dirty"
+    return "unknown"
+
+
+def _alert_from_watchout_text(text: str) -> ListingCardAlert | None:
+    group = _watchout_dedupe_group(text)
+    if group == "title_dirty":
+        return ListingCardAlert("red", group, TITLE_DIRTY_HEADLINE, TITLE_DIRTY_DETAIL)
+    if group == "title_undisclosed":
+        return ListingCardAlert(
+            "yellow",
+            "title_unknown",
+            TITLE_UNKNOWN_HEADLINE,
+            TITLE_UNKNOWN_DETAIL,
+        )
+    if group == "price_missing":
+        return ListingCardAlert("yellow", group, WATCHOUT_MISSING_PRICE, None)
+    if group == "mileage_missing":
+        return ListingCardAlert("yellow", group, WATCHOUT_MISSING_MILEAGE, None)
+    if group == "seller_title_conflict":
+        return ListingCardAlert("yellow", group, SELLER_TITLE_CONFLICT_WARNING, None)
+    if warning_is_major(text):
+        return ListingCardAlert("red", group or "major_risk", str(text).strip(), None)
+    if group in ("awd_requirement",):
+        return ListingCardAlert("yellow", group, str(text).strip(), None)
+    if group:
+        return ListingCardAlert("yellow", group, str(text).strip(), None)
+    return None
+
+
+def build_listing_card_alerts(
+    entry: dict[str, Any],
+    *,
+    quality_summary: dict[str, Any],
+    confidence: dict[str, Any] | None = None,
+    fit: dict[str, Any] | None = None,
+    listing: dict[str, Any] | None = None,
+    raw_listing: dict[str, Any] | None = None,
+) -> list[ListingCardAlert]:
+    """Collect deduplicated card alerts (title, gaps, major risks, info notes)."""
+    listing = listing or entry.get("listing") or {}
+    fit = fit or entry.get("fit") or {}
+    confidence = confidence or entry.get("confidence") or fit.get("confidence") or {}
+    raw_listing = raw_listing if raw_listing is not None else entry.get("raw_listing")
+
+    alerts: list[ListingCardAlert] = []
+    seen_groups: set[str] = set()
+
+    def add(alert: ListingCardAlert) -> None:
+        if alert.group in seen_groups:
+            return
+        seen_groups.add(alert.group)
+        alerts.append(alert)
+
+    title_certainty = str(quality_summary.get("title_certainty", ""))
+    if title_certainty == "dirty":
+        add(
+            ListingCardAlert(
+                "red",
+                "title_dirty",
+                TITLE_DIRTY_HEADLINE,
+                TITLE_DIRTY_DETAIL,
+            )
+        )
+    elif title_certainty == "unknown":
+        add(
+            ListingCardAlert(
+                "yellow",
+                "title_unknown",
+                TITLE_UNKNOWN_HEADLINE,
+                TITLE_UNKNOWN_DETAIL,
+            )
+        )
+    elif title_certainty == "clean":
+        add(ListingCardAlert("info", "title_clean", TITLE_CLEAN_HEADLINE, None))
+
+    if listing.get("price") is None:
+        add(ListingCardAlert("yellow", "price_missing", WATCHOUT_MISSING_PRICE, None))
+    if listing.get("mileage") is None:
+        add(ListingCardAlert("yellow", "mileage_missing", WATCHOUT_MISSING_MILEAGE, None))
+
+    if detect_seller_title_conflict(raw_listing, listing):
+        add(
+            ListingCardAlert(
+                "yellow",
+                "seller_title_conflict",
+                SELLER_TITLE_CONFLICT_WARNING,
+                None,
+            )
+        )
+
+    if shows_strong_fit_low_confidence_warning(fit, confidence):
+        add(
+            ListingCardAlert(
+                "yellow",
+                "strong_fit_low_trust",
+                STRONG_FIT_LOW_CONFIDENCE_HEADLINE,
+                STRONG_FIT_LOW_CONFIDENCE_CAPTION,
+            )
+        )
+
+    inferred = confidence.get("inferred_fields") or []
+    if "mileage" in inferred and "mileage_inferred" not in seen_groups:
+        add(ListingCardAlert("info", "mileage_inferred", _INFO_MILEAGE_INFERRED, None))
+
+    provider_warnings = entry.get("provider_warnings")
+    if isinstance(provider_warnings, list) and provider_warnings:
+        add(ListingCardAlert("info", "provider_limited", _INFO_PROVIDER_LIMITED, None))
+
+    for warning in fit.get("warnings") or []:
+        mapped = _alert_from_watchout_text(str(warning))
+        if mapped:
+            add(mapped)
+    for reason in fit.get("negative_reasons") or []:
+        mapped = _alert_from_watchout_text(str(reason))
+        if mapped:
+            add(mapped)
+
+    return alerts
+
+
+def banner_alerts(alerts: list[ListingCardAlert]) -> list[ListingCardAlert]:
+    """Top-of-card banners (exclude title blocks shown separately)."""
+    return [alert for alert in alerts if not alert.group.startswith("title_")]
+
+
+def title_status_alert(alerts: list[ListingCardAlert]) -> ListingCardAlert | None:
+    for alert in alerts:
+        if alert.group.startswith("title_"):
+            return alert
+    return None
+
+
+def suppressed_watchout_groups(alerts: list[ListingCardAlert]) -> set[str]:
+    """Watchout topics already surfaced elsewhere on the card."""
+    groups = {alert.group for alert in alerts}
+    if "title_dirty" in groups or "title_unknown" in groups or "title_clean" in groups:
+        groups |= {"title_dirty", "title_undisclosed", "title_clean"}
+    return groups
+
+
+def filter_watchouts_for_card(
+    watchouts: list[str],
+    alerts: list[ListingCardAlert],
+    *,
+    max_visible: int = MAX_WATCHOUTS_VISIBLE,
+) -> tuple[list[str], list[str]]:
+    """Drop watchouts already shown; cap visible count."""
+    suppressed = suppressed_watchout_groups(alerts)
+    filtered: list[str] = []
+    for item in watchouts:
+        group = _watchout_dedupe_group(item)
+        if group is not None and group in suppressed:
+            continue
+        filtered.append(item)
+    filtered = _dedupe_watchouts(filtered)
+    visible = filtered[:max_visible]
+    overflow = filtered[max_visible:]
+    return visible, overflow
+
+
+def format_additional_notes_label(count: int) -> str:
+    return f"Additional notes ({count})"
+
+
 def listing_source_url(listing: dict[str, Any]) -> str | None:
     """Return a safe listing URL when explicitly provided."""
     url = listing.get("listing_url")
@@ -719,10 +961,14 @@ def resolve_listing_summary_badge(
     *,
     rank: int = 1,
     is_budget_option: bool = False,
+    alerts: list[ListingCardAlert] | None = None,
 ) -> tuple[str, str] | None:
     if rank == 1 and qualifies_as_top_pick(entry):
         return SUMMARY_BADGE_TOP_PICK
-    if listing_needs_caution_badge(entry):
+    title_handled = alerts and any(
+        alert.group in ("title_dirty", "title_unknown") for alert in alerts
+    )
+    if not title_handled and listing_needs_caution_badge(entry):
         return SUMMARY_BADGE_CAUTION
     if is_budget_option:
         return SUMMARY_BADGE_BUDGET
@@ -768,7 +1014,6 @@ def format_compact_listing_header(
     listing = entry["listing"]
     fit = entry["fit"]
     confidence = entry.get("confidence") or fit.get("confidence") or {}
-    level = confidence.get("confidence_level", fit.get("confidence_level", "Low"))
     display_label = resolve_listing_display_name(entry, raw_listing)
     short_label = f"{listing['make']} {listing['model']}"
     if short_label.casefold() not in display_label.casefold():
@@ -777,7 +1022,7 @@ def format_compact_listing_header(
         title_line = f"#{rank} {short_label}"
     stats = " | ".join(
         [
-            f"{level} trust",
+            format_trust_with_explanation(confidence),
             format_compact_price(listing.get("price")),
             format_compact_mileage(listing.get("mileage")),
         ]
@@ -910,30 +1155,11 @@ def format_provider_name_label(provider_name: str) -> str:
 
 
 def format_listing_quality_metrics(summary: dict[str, Any]) -> str:
-    """Single compact line: source, fit, data quality, title."""
+    """Single compact line: source, fit, and data quality (title shown separately)."""
     fit = _FIT_QUALITY_LABELS.get(str(summary.get("fit_quality", "")), "—")
     data = _DATA_QUALITY_LABELS.get(str(summary.get("data_quality_level", "")), "—")
-    title = _TITLE_CERTAINTY_LABELS.get(str(summary.get("title_certainty", "")), "—")
     source = format_provider_name_label(str(summary.get("source", "")))
-    return f"**Source:** {source} · **Fit:** {fit} · **Data quality:** {data} · **Title:** {title}"
-
-
-def format_listing_quality_badge_lines(
-    summary: dict[str, Any],
-    *,
-    limit: int = 3,
-) -> list[str]:
-    badges = summary.get("badges") or []
-    return [str(item) for item in badges[:limit] if str(item).strip()]
-
-
-def format_listing_quality_warning_lines(
-    summary: dict[str, Any],
-    *,
-    limit: int = 3,
-) -> list[str]:
-    warnings = summary.get("warnings") or []
-    return [str(item) for item in warnings[:limit] if str(item).strip()]
+    return f"**Source:** {source} · **Fit:** {fit} · **Data quality:** {data}"
 
 
 def format_listing_data_details_lines(summary: dict[str, Any]) -> list[str]:

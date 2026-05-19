@@ -8,11 +8,15 @@ from app.listing_display import (
     SUMMARY_BADGE_TOP_PICK,
     STRONG_FIT_LOW_CONFIDENCE_CAPTION,
     STRONG_FIT_LOW_CONFIDENCE_HEADLINE,
+    TITLE_DIRTY_HEADLINE,
+    TITLE_UNKNOWN_HEADLINE,
     CAUTION_PREFIX,
     WATCHOUT_MISSING_MILEAGE,
     WATCHOUT_MISSING_PRICE,
     WATCHOUT_VERIFY_TITLE,
     format_caution_warning,
+    banner_alerts,
+    build_listing_card_alerts,
     build_watchouts,
     budget_option_listing_names,
     detect_seller_title_conflict,
@@ -23,11 +27,14 @@ from app.listing_display import (
     format_listing_card_tagline,
     format_listing_data_details_lines,
     format_listing_facts,
-    format_listing_quality_badge_lines,
     format_listing_quality_metrics,
-    format_listing_quality_warning_lines,
     format_listing_source_markdown,
+    format_title_status_block,
+    format_trust_with_explanation,
+    filter_watchouts_for_card,
+    format_additional_notes_label,
     resolve_listing_quality_summary,
+    title_status_alert,
     format_mileage,
     format_positive_reason_display,
     format_positive_reasons_for_display,
@@ -345,11 +352,12 @@ def test_resolve_summary_badge_caution_for_dirty_title():
     entry = _strong_entry(clean_title=False)
     entry["listing"]["clean_title"] = False
     entry["fit"]["warnings"] = []
-    badge = resolve_listing_summary_badge(entry, rank=2)
-    assert badge == SUMMARY_BADGE_CAUTION
-    line = format_summary_badge_line(badge)
-    assert line.startswith(CAUTION_PREFIX)
-    assert line == WATCHOUT_VERIFY_TITLE
+    quality = resolve_listing_quality_summary(entry)
+    alerts = build_listing_card_alerts(entry, quality_summary=quality)
+    badge = resolve_listing_summary_badge(entry, rank=2, alerts=alerts)
+    assert badge is None
+    assert title_status_alert(alerts) is not None
+    assert TITLE_DIRTY_HEADLINE in format_title_status_block("dirty")
 
 
 def test_budget_option_listing_names_picks_lowest_strong_under_budget():
@@ -379,9 +387,36 @@ def test_format_compact_listing_header_matches_expected_shape():
     title_line, stats_line = format_compact_listing_header(entry, rank=1)
     assert title_line.startswith("#1 ")
     assert "Toyota" in title_line
-    assert "trust" in stats_line.casefold()
+    assert "High trust (all core fields provided)" in stats_line
     assert "$" in stats_line
     assert "% fit" not in stats_line
+
+
+def test_format_trust_with_explanation_medium_title_unavailable():
+    confidence = {
+        "confidence_level": "Medium",
+        "missing_fields": ["clean_title"],
+        "inferred_fields": [],
+    }
+    assert format_trust_with_explanation(confidence) == "Medium trust (title unavailable)"
+
+
+def test_format_trust_with_explanation_medium_mileage_inferred():
+    confidence = {
+        "confidence_level": "Medium",
+        "missing_fields": [],
+        "inferred_fields": ["mileage"],
+    }
+    assert format_trust_with_explanation(confidence) == "Medium trust (mileage inferred)"
+
+
+def test_format_trust_with_explanation_low_multiple_missing():
+    confidence = {
+        "confidence_level": "Low",
+        "missing_fields": ["price", "mileage"],
+        "inferred_fields": [],
+    }
+    assert format_trust_with_explanation(confidence) == "Low trust (multiple missing fields)"
 
 
 def test_format_card_fit_summary_includes_label_and_score():
@@ -429,7 +464,7 @@ def test_format_listing_quality_metrics_separates_fit_and_data() -> None:
     assert "**Source:** Mock" in metrics
     assert "**Fit:** Strong" in metrics
     assert "**Data quality:** High" in metrics
-    assert "**Title:** Clean" in metrics
+    assert "**Title:**" not in metrics
 
 
 def test_strong_fit_medium_data_quality_on_card_entry() -> None:
@@ -466,35 +501,78 @@ def test_weak_fit_high_data_quality_on_card_entry() -> None:
     assert summary["data_quality_level"] == "high"
 
 
-def test_listing_quality_warnings_dirty_vs_unknown() -> None:
-    dirty = _strong_entry(clean_title=False)
-    dirty["provider_raw_fields"] = ["make", "model", "year", "price", "mileage"]
-    unknown = _strong_entry()
-    unknown["listing"].pop("clean_title", None)
-    unknown["provider_raw_fields"] = ["make", "model", "year", "price", "mileage"]
+def test_title_status_blocks_dirty_vs_unknown() -> None:
+    dirty_block = format_title_status_block("dirty")
+    unknown_block = format_title_status_block("unknown")
 
-    dirty_warnings = format_listing_quality_warning_lines(
-        resolve_listing_quality_summary(dirty),
-        limit=3,
-    )
-    unknown_warnings = format_listing_quality_warning_lines(
-        resolve_listing_quality_summary(unknown),
-        limit=3,
-    )
-
-    assert len(dirty_warnings) == 1
-    assert len(unknown_warnings) == 1
-    assert "Title history unavailable" in unknown_warnings[0]
-    assert "dirty title" not in unknown_warnings[0].casefold()
-    assert len(dirty_warnings[0]) > len(unknown_warnings[0])
+    assert TITLE_DIRTY_HEADLINE in dirty_block
+    assert TITLE_UNKNOWN_HEADLINE in unknown_block
+    assert "dirty title" not in unknown_block.casefold()
+    assert len(dirty_block) > len(unknown_block)
 
 
-def test_listing_quality_badges_capped_at_three() -> None:
-    summary = {
-        "badges": ["A", "B", "C", "D"],
-        "warnings": [],
-    }
-    assert format_listing_quality_badge_lines(summary, limit=3) == ["A", "B", "C"]
+def test_strong_fit_with_medium_data_on_card_alerts() -> None:
+    entry = _strong_entry()
+    entry["listing"].pop("clean_title", None)
+    entry["provider_raw_fields"] = ["make", "model", "year", "price", "mileage"]
+    quality = resolve_listing_quality_summary(entry)
+    alerts = build_listing_card_alerts(entry, quality_summary=quality)
+
+    assert quality["fit_quality"] == "strong"
+    assert quality["data_quality_level"] == "medium"
+    assert any(alert.group == "title_unknown" for alert in alerts)
+    assert not any(alert.group == "title_dirty" for alert in alerts)
+
+
+def test_weak_fit_high_data_card_alerts() -> None:
+    entry = _strong_entry()
+    entry["fit"]["fit_label"] = "Weak fit"
+    entry["provider_raw_fields"] = [
+        "make",
+        "model",
+        "year",
+        "price",
+        "mileage",
+        "clean_title",
+    ]
+    quality = resolve_listing_quality_summary(entry)
+    alerts = build_listing_card_alerts(entry, quality_summary=quality)
+
+    assert quality["fit_quality"] == "weak"
+    assert quality["data_quality_level"] == "high"
+    assert any(alert.group == "title_clean" for alert in alerts)
+
+
+def test_banner_alerts_exclude_title_blocks() -> None:
+    entry = _strong_entry(clean_title=False)
+    entry["listing"]["clean_title"] = False
+    quality = resolve_listing_quality_summary(entry)
+    alerts = build_listing_card_alerts(entry, quality_summary=quality)
+
+    assert title_status_alert(alerts) is not None
+    assert not any(alert.group.startswith("title_") for alert in banner_alerts(alerts))
+
+
+def test_filter_watchouts_caps_at_four_with_overflow() -> None:
+    entry = _strong_entry()
+    entry["fit"]["warnings"] = [
+        "Known weak year for this model",
+        "Year outside recommended range",
+        "Not the recommended Honda Civic",
+    ]
+    entry["fit"]["negative_reasons"] = [
+        "Over budget by $2,000",
+        "Mileage exceeds preferred max",
+        "Does not match any recommended model",
+    ]
+    watchouts = build_watchouts(entry["fit"], entry["listing"])
+    quality = resolve_listing_quality_summary(entry)
+    alerts = build_listing_card_alerts(entry, quality_summary=quality)
+    visible, overflow = filter_watchouts_for_card(watchouts, alerts, max_visible=4)
+
+    assert len(visible) == 4
+    assert len(overflow) == 2
+    assert format_additional_notes_label(2) == "Additional notes (2)"
 
 
 def test_listing_data_details_omits_raw_provenance() -> None:
