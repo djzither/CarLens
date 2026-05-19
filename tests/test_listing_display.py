@@ -11,6 +11,9 @@ from app.listing_display import (
     build_watchouts,
     budget_option_listing_names,
     detect_seller_title_conflict,
+    UNMATCHED_SECTION_INTRO,
+    format_card_fit_summary,
+    format_card_scoring_reasons,
     format_compact_listing_header,
     format_listing_card_tagline,
     format_listing_facts,
@@ -323,9 +326,29 @@ def test_format_compact_listing_header_matches_expected_shape():
     title_line, stats_line = format_compact_listing_header(entry, rank=1)
     assert title_line.startswith("#1 ")
     assert "Toyota" in title_line
-    assert "% fit" in stats_line
     assert "trust" in stats_line.casefold()
     assert "$" in stats_line
+    assert "% fit" not in stats_line
+
+
+def test_format_card_fit_summary_includes_label_and_score():
+    entry = _strong_entry()
+    summary = format_card_fit_summary(entry["fit"])
+    assert "Strong fit" in summary
+    assert "91%" in summary
+    assert "score" in summary.casefold()
+
+
+def test_format_card_scoring_reasons_returns_scoring_rationale():
+    entry = _strong_entry()
+    entry["fit"]["reasons"] = ["Strong model match", "Within budget tolerance"]
+    reasons = format_card_scoring_reasons(entry["fit"])
+    assert len(reasons) == 2
+    assert "Strong model match" in reasons[0]
+
+
+def test_unmatched_section_intro_is_clear():
+    assert "did not match" in UNMATCHED_SECTION_INTRO.casefold()
 
 
 def test_format_listing_card_tagline_for_top_pick():

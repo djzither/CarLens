@@ -8,25 +8,28 @@ import sys
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+APP_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = APP_DIR.parent
 
-# Streamlit loads this file as module "app" when run via `streamlit run app/app.py`,
-# which shadows the `app/` package. Drop a script binding so package imports work.
-_shadowed_app = sys.modules.get("app")
-if _shadowed_app is not None and not hasattr(_shadowed_app, "__path__"):
-    del sys.modules["app"]
+# Streamlit runs this file as script module "app" (`streamlit run app/app.py`), not as
+# package submodule app.app. Absolute `from app.*` then re-imports this file and recurses.
+# Sibling imports plus app/ on sys.path work for Streamlit and for pytest (`from app.app`).
+for directory in (APP_DIR, PROJECT_ROOT):
+    path_str = str(directory)
+    if path_str not in sys.path:
+        sys.path.insert(0, path_str)
 
 import streamlit as st
 
-from app.listing_display import (
+from listing_display import (
     DIRTY_TITLE_BANNER,
     WATCHOUT_MISSING_MILEAGE,
     WATCHOUT_MISSING_PRICE,
     budget_option_listing_names,
     build_ranking_explanation_lines,
     build_watchouts,
+    format_card_fit_summary,
+    format_card_scoring_reasons,
     format_compact_listing_header,
     format_confidence_breakdown,
     format_listing_card_tagline,
@@ -40,6 +43,7 @@ from app.listing_display import (
     resolve_listing_display_name,
     resolve_listing_summary_badge,
     top_pick_banner_text,
+    UNMATCHED_SECTION_INTRO,
 )
 from src.listings.listing_compare import (
     COMPARE_TABLE_ROWS,
@@ -60,7 +64,7 @@ from src.listings.listing_ranker import (
     rank_listings_for_recommendations,
 )
 from src.profiles.buyer_profile_loader import load_buyer_profiles
-from app.provider_mock_demo import (
+from provider_mock_demo import (
     PROVIDER_MOCK_BUYER_PROFILE_ID,
     PROVIDER_PIPELINE_STEPS,
     adapt_provider_payloads,
@@ -409,6 +413,11 @@ def render_listing_summary(
     header_cols = st.columns([6, 1])
     with header_cols[0]:
         st.markdown(f"**{title_line}**")
+        st.markdown(
+            f"<span style='color:{_fit_badge_color(fit['fit_label'])}'>"
+            f"{format_card_fit_summary(fit)}</span>",
+            unsafe_allow_html=True,
+        )
         st.markdown(stats_line)
         st.caption(
             format_listing_card_tagline(
@@ -417,12 +426,11 @@ def render_listing_summary(
                 is_budget_option=is_budget_option,
             )
         )
-        if listing.get("clean_title") is not False:
-            st.markdown(
-                f"<span style='color:{_fit_badge_color(fit['fit_label'])}'>"
-                f"{fit['fit_label']}</span>",
-                unsafe_allow_html=True,
-            )
+        scoring_reasons = format_card_scoring_reasons(fit)
+        if scoring_reasons:
+            st.markdown("**Why this score**")
+            for reason in scoring_reasons:
+                st.markdown(f"- {reason}")
     with header_cols[1]:
         st.checkbox(
             "Compare",
@@ -619,6 +627,45 @@ def render_compare_mode(catalog: dict[str, dict[str, Any]]) -> None:
         st.rerun()
 
 
+def render_buyer_context_banner(
+    profile_label: str,
+    *,
+    budget_max: int,
+    max_mileage: int,
+    require_awd: bool,
+) -> None:
+    awd_note = " · AWD required" if require_awd else ""
+    st.markdown(
+        f"**Buyer profile:** {profile_label} · "
+        f"**Budget:** {budget_max:,} · **Max mileage:** {max_mileage:,}{awd_note}"
+    )
+
+
+def render_unmatched_listings(
+    unmatched: list[dict[str, Any]],
+    raw_listings: dict[str, dict[str, Any]],
+    *,
+    display_names: dict[str, str | None] | None = None,
+    selected_count: int,
+) -> None:
+    st.divider()
+    st.subheader("Other listings (no model match)")
+    st.caption(UNMATCHED_SECTION_INTRO)
+    enriched = [
+        _enrich_entry(entry, raw_listings, display_names=display_names)
+        for entry in unmatched
+    ]
+    for rank, entry in enumerate(enriched, start=1):
+        compare_id = make_compare_id("Other", "Unmatched", entry["listing_name"])
+        with st.container(border=True):
+            render_listing_summary(
+                entry,
+                rank=rank,
+                compare_id=compare_id,
+                selected_count=selected_count,
+            )
+
+
 def render_compare_sidebar_hint() -> None:
     selected_count = count_selected_compare(st.session_state)
     st.divider()
@@ -807,6 +854,24 @@ def main() -> None:
             for step_number, step in enumerate(PROVIDER_PIPELINE_STEPS, start=1):
                 st.markdown(f"{step_number}. {step}")
 
+    render_buyer_context_banner(
+        profile_labels[selected_id],
+        budget_max=budget_max,
+        max_mileage=max_mileage,
+        require_awd=require_awd,
+    )
+    recommendation_result = payload.get("recommendation_result") or {}
+    recommended_models = recommendation_result.get("recommendations") or []
+    if recommended_models:
+        model_names = [
+            f"{item['make']} {item['model']}" for item in recommended_models[:5]
+        ]
+        st.markdown(
+            "**Recommended models:** "
+            + ", ".join(model_names)
+            + (" …" if len(recommended_models) > 5 else "")
+        )
+
     for group in ranked["groups"]:
         render_vehicle_section(
             group,
@@ -817,15 +882,8 @@ def main() -> None:
 
     unmatched = ranked.get("unmatched_listings") or []
     if unmatched:
-        st.divider()
-        st.subheader("Unmatched listings")
-        pseudo_group = {
-            "make": "Other",
-            "model": "Unmatched",
-            "listings": unmatched,
-        }
-        render_vehicle_section(
-            pseudo_group,
+        render_unmatched_listings(
+            unmatched,
             raw_lookup,
             display_names=display_names,
             selected_count=selected_count,

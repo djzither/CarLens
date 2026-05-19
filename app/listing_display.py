@@ -354,6 +354,30 @@ def format_fit_percent(fit: dict[str, Any]) -> str:
     return f"{int(round(score * 100))}% fit"
 
 
+def format_fit_score_display(fit: dict[str, Any]) -> str:
+    """Buyer-facing fit score (0–100); label is shown separately."""
+    score = float(fit.get("fit_score", 0.0))
+    return f"{int(round(score * 100))}%"
+
+
+UNMATCHED_SECTION_INTRO = (
+    "These listings did not match any recommended vehicle model. "
+    "They are shown separately and are not ranked against your top picks."
+)
+
+
+def format_card_fit_summary(fit: dict[str, Any]) -> str:
+    """Single-line fit label + score for listing cards."""
+    label = str(fit.get("fit_label", "—"))
+    return f"{label} · {format_fit_score_display(fit)} score"
+
+
+def format_card_scoring_reasons(fit: dict[str, Any], *, limit: int = 3) -> list[str]:
+    """Short scoring rationale bullets for the card surface (full list stays in expander)."""
+    reasons = [str(item).strip() for item in (fit.get("reasons") or []) if str(item).strip()]
+    return reasons[:limit]
+
+
 def format_title_status(listing: dict[str, Any]) -> str:
     clean = listing.get("clean_title")
     if clean is True:
@@ -660,7 +684,6 @@ def format_compact_listing_header(
         title_line = f"#{rank} {short_label}"
     stats = " | ".join(
         [
-            format_fit_percent(fit),
             f"{level} trust",
             format_compact_price(listing.get("price")),
             format_compact_mileage(listing.get("mileage")),
