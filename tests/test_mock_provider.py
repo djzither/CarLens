@@ -266,5 +266,41 @@ def test_get_by_id_includes_provenance(provider: MockListingProvider) -> None:
     assert entry["provider_raw_fields"]
 
 
+def test_provenance_omits_provider_url_when_no_url_field(
+    provider: MockListingProvider,
+) -> None:
+    result = provider.search(SearchFilters(make="Toyota", model="Corolla"))
+    entry = next(e for e in result.listings if e["id"] == "good_corolla")
+    listing = _listing(entry)
+
+    assert "provider_url" not in entry
+    assert not any(
+        listing.get(field) for field in ("listing_url", "source_url", "vdp_url", "url")
+    )
+
+
+def test_provenance_provider_listing_id_falls_back_to_entry_id(
+    provider: MockListingProvider,
+) -> None:
+    provider._entries.append(
+        {
+            "id": "entry_only_id",
+            "listing": {
+                "make": "Toyota",
+                "model": "Corolla",
+                "year": 2016,
+                "price": 8000,
+            },
+        }
+    )
+    result = provider.search(SearchFilters(make="Toyota", model="Corolla"))
+    entry = next(e for e in result.listings if e["id"] == "entry_only_id")
+    listing = _listing(entry)
+
+    assert entry["provider_listing_id"] == "entry_only_id"
+    assert "listing_id" not in listing
+    assert "id" not in listing
+
+
 def _normalize(value: object) -> str:
     return str(value).strip().casefold()
