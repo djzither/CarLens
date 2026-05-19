@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.listings.listing_normalizer import parse_mileage, parse_price
+from src.listings.auto_dev_adapter import adapt_auto_dev_listing
 from src.listings.provider_clean_title import apply_explicit_clean_title
 
 AUTO_DEV_SOURCE = "auto.dev"
@@ -120,70 +120,6 @@ def _first_photo_url(media: dict[str, Any]) -> str | None:
             if url:
                 return url
     return None
-
-
-def adapt_auto_dev_listing(provider_listing: dict[str, Any]) -> dict[str, Any]:
-    """Map an Auto.dev listing object to the CarLens raw listing shape."""
-    if not isinstance(provider_listing, dict):
-        raise ValueError("provider_listing must be a JSON object")
-
-    vehicle = _nested_dict(provider_listing.get("vehicle"))
-    retail = _nested_dict(provider_listing.get("retailListing"))
-    wholesale = _nested_dict(provider_listing.get("wholesaleListing"))
-    raw: dict[str, Any] = {"source": AUTO_DEV_SOURCE}
-
-    listing_id = _optional_str(provider_listing.get("vin")) or _optional_str(
-        vehicle.get("vin")
-    )
-    _set_if_present(raw, "listing_id", listing_id)
-
-    _set_if_present(raw, "make", vehicle.get("make"))
-    _set_if_present(raw, "model", vehicle.get("model"))
-    year = _optional_int(vehicle.get("year"))
-    if year is not None:
-        raw["year"] = year
-
-    _set_if_present(raw, "trim", vehicle.get("trim"))
-    _set_if_present(raw, "drive_type", _normalize_drive_type(vehicle.get("drivetrain")))
-
-    price = retail.get("price")
-    if price is not None:
-        parsed_price = parse_price(price)
-        raw["price"] = parsed_price if parsed_price is not None else price
-
-    mileage = retail.get("miles")
-    if mileage is None:
-        mileage = wholesale.get("miles")
-    if mileage is not None:
-        parsed_mileage = parse_mileage(mileage)
-        raw["mileage"] = parsed_mileage if parsed_mileage is not None else mileage
-
-    title = _compose_title(
-        year=vehicle.get("year"),
-        make=vehicle.get("make"),
-        model=vehicle.get("model"),
-        trim=vehicle.get("trim"),
-    )
-    _set_if_present(raw, "title", title)
-
-    _set_if_present(raw, "listing_url", retail.get("vdp"))
-    _set_if_present(raw, "image_url", retail.get("primaryImage"))
-
-    distance = provider_listing.get("distance")
-    if distance is None:
-        distance = retail.get("distance")
-    distance_miles = _optional_distance_miles(distance)
-    if distance_miles is not None:
-        raw["distance_miles"] = distance_miles
-
-    location = _format_location(
-        retail.get("city"),
-        retail.get("state"),
-        retail.get("zip"),
-    )
-    _set_if_present(raw, "location", location)
-
-    return raw
 
 
 def adapt_marketcheck_listing(provider_listing: dict[str, Any]) -> dict[str, Any]:

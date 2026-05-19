@@ -13,9 +13,10 @@ from src.listings.auto_dev_client import (
     parse_auto_dev_listings,
     resolve_fixture_payload,
 )
-from src.listings.listing_source_adapter import AUTO_DEV_SOURCE, adapt_auto_dev_listing
+from src.listings.auto_dev_adapter import adapt_auto_dev_listing, pop_adapter_warnings
+from src.listings.listing_source_adapter import AUTO_DEV_SOURCE
 from src.listings.providers.raw_listing_provider import RawListingProvider, raw_listing_matches_id
-from src.listings.providers.search_support import search_raw_listings
+from src.listings.providers.search_support import resolve_entry_id, search_raw_listings
 from src.listings.providers.types import SearchFilters, SearchResult
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -26,6 +27,19 @@ DEFAULT_FIXTURE_PATH = (
 
 def _iter_auto_dev_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return iter_auto_dev_provider_rows(payload)
+
+
+def _expand_adapter_warnings(raw_listings: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+    warnings: list[str] = []
+    cleaned: list[dict[str, Any]] = []
+    for index, raw in enumerate(raw_listings):
+        listing = dict(raw)
+        adapter_messages = pop_adapter_warnings(listing)
+        if adapter_messages:
+            entry_id = resolve_entry_id(listing, fallback_index=index)
+            warnings.extend(f"{entry_id}: {message}" for message in adapter_messages)
+        cleaned.append(listing)
+    return cleaned, warnings
 
 
 def _filters_to_search_params(filters: SearchFilters) -> AutoDevSearchParams:
@@ -130,7 +144,9 @@ class AutoDevProvider(RawListingProvider):
         return None
 
     def search(self, filters: SearchFilters) -> SearchResult:
-        raw_listings = self.fetch_raw_listings(filters)
+        raw_listings, adapter_warnings = _expand_adapter_warnings(
+            self.fetch_raw_listings(filters)
+        )
         total = self.count_raw_listings()
         result = search_raw_listings(
             provider_name=self.name,
@@ -139,12 +155,19 @@ class AutoDevProvider(RawListingProvider):
             validate_listing=self.validate_listing,
             total_available=total if total is not None else len(raw_listings),
         )
+        merged_warnings = [*adapter_warnings, *result.provider_warnings]
         if not self._last_fetch_errors:
-            return result
+            return SearchResult(
+                listings=result.listings,
+                provider_name=result.provider_name,
+                provider_warnings=merged_warnings,
+                errors=result.errors,
+                total_available=result.total_available,
+            )
         return SearchResult(
             listings=result.listings,
             provider_name=result.provider_name,
-            provider_warnings=result.provider_warnings,
+            provider_warnings=merged_warnings,
             errors=[*result.errors, *self._last_fetch_errors],
             total_available=result.total_available,
         )
