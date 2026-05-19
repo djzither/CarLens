@@ -1,0 +1,450 @@
+{
+  "schema_version": "1.0",
+  "buyer_profile_id": "student",
+  "description": "Adversarial marketplace demo — red-team parser, confidence, and trust attacks.",
+  "attack_catalog": {
+    "parser_attacks": "Noisy titles, bait years, and price-in-text tricks",
+    "confidence_attacks": "Sparse rows and stacked inferred fields",
+    "title_status_attacks": "Salvage wording, clean-title bait, and rebuilt titles",
+    "mileage_ambiguity": "Conflicting or unclear odometer signals",
+    "awd_failures": "Missing or false AWD claims (use outdoor_snow profile)",
+    "duplicate_listings": "Cross-source duplicate posts",
+    "sparse_listings": "Title-only or nearly empty rows",
+    "misleading_text": "Service-history and hype language masquerading as mileage",
+    "contradictory_signals": "Title vs description or field conflicts"
+  },
+  "listings": [
+    {
+      "id": "adv_parser_price_drop_corolla",
+      "attack_category": "parser_attacks",
+      "listing": {
+        "title": "PRICE DROP 2022!!! 2016 Toyota Corolla LE",
+        "price": "$10,200",
+        "listing_url": "https://demo.carlens.local/adv/parser-price-drop"
+      },
+      "expect": {
+        "normalizes": true,
+        "year": 2016,
+        "confidence_in": ["Low", "Medium"]
+      }
+    },
+    {
+      "id": "adv_parser_obo_price_in_title",
+      "attack_category": "parser_attacks",
+      "listing": {
+        "title": "2015 Toyota Corolla $8500 OBO",
+        "listing_url": "https://demo.carlens.local/adv/parser-obo-title"
+      },
+      "expect": {
+        "normalizes": true,
+        "year": 2015,
+        "missing_fields_include": "price"
+      }
+    },
+    {
+      "id": "adv_parser_garbled_separators",
+      "attack_category": "parser_attacks",
+      "listing": {
+        "title": "!!! 2016 /// Toyota *** Corolla LE ### 92k miles $9,900",
+        "listing_url": "https://demo.carlens.local/adv/parser-garbled"
+      },
+      "expect": {
+        "normalizes": true,
+        "year": 2016,
+        "mileage": 92000
+      }
+    },
+    {
+      "id": "adv_parser_invalid_no_year",
+      "attack_category": "parser_attacks",
+      "listing": {
+        "title": "Toyota Corolla for sale cheap — must go",
+        "price": 7000,
+        "listing_url": "https://demo.carlens.local/adv/parser-no-year"
+      },
+      "expect": {
+        "normalizes": false
+      }
+    },
+    {
+      "id": "adv_confidence_sparse_title_only",
+      "attack_category": "confidence_attacks",
+      "listing": {
+        "title": "2016 Toyota Corolla LE",
+        "listing_url": "https://demo.carlens.local/adv/conf-sparse-title"
+      },
+      "expect": {
+        "normalizes": true,
+        "confidence_level": "Low"
+      }
+    },
+    {
+      "id": "adv_confidence_missing_core_fields",
+      "attack_category": "confidence_attacks",
+      "listing": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "listing_url": "https://demo.carlens.local/adv/conf-missing-core"
+      },
+      "expect": {
+        "normalizes": true,
+        "confidence_in": ["Low", "Medium"],
+        "missing_fields_include": "price"
+      }
+    },
+    {
+      "id": "adv_confidence_stacked_inferred",
+      "attack_category": "confidence_attacks",
+      "listing": {
+        "title": "2016 Toyota Corolla LE clean title 92k miles",
+        "listing_url": "https://demo.carlens.local/adv/conf-stacked-inferred"
+      },
+      "expect": {
+        "normalizes": true,
+        "confidence_level": "Low",
+        "min_inferred_fields": 2
+      }
+    },
+    {
+      "id": "adv_title_clean_salvage_phrase",
+      "attack_category": "title_status_attacks",
+      "listing": {
+        "title": "2016 Toyota Corolla LE clean title salvage runs great",
+        "price": 9500,
+        "listing_url": "https://demo.carlens.local/adv/title-clean-salvage-phrase"
+      },
+      "expect": {
+        "normalizes": true,
+        "clean_title": true,
+        "confidence_in": ["Low", "Medium"]
+      }
+    },
+    {
+      "id": "adv_title_contradictory_description",
+      "attack_category": "title_status_attacks",
+      "listing": {
+        "title": "2016 Toyota Corolla SE clean title",
+        "description": "salvage title rebuilt — runs great, must see",
+        "price": "$9,500",
+        "listing_url": "https://demo.carlens.local/adv/title-contradictory-desc"
+      },
+      "expect": {
+        "normalizes": true,
+        "clean_title": false,
+        "warning_contains": "clean title"
+      }
+    },
+    {
+      "id": "adv_title_rebuilt_explicit",
+      "attack_category": "title_status_attacks",
+      "listing": {
+        "title": "2014 Honda Civic EX-L rebuilt title cheap",
+        "price": 6500,
+        "listing_url": "https://demo.carlens.local/adv/title-rebuilt"
+      },
+      "expect": {
+        "normalizes": true,
+        "clean_title": false,
+        "fit_label": "Weak fit"
+      }
+    },
+    {
+      "id": "adv_mileage_maybe_92_120",
+      "attack_category": "mileage_ambiguity",
+      "listing": {
+        "title": "2016 Toyota Corolla 92k? maybe 120k miles",
+        "price": 9900,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/adv/mileage-maybe"
+      },
+      "expect": {
+        "normalizes": true,
+        "ambiguity_detected": true,
+        "confidence_level": "Low"
+      }
+    },
+    {
+      "id": "adv_mileage_engine_vs_car",
+      "attack_category": "mileage_ambiguity",
+      "listing": {
+        "title": "Toyota Corolla engine replaced at 50k car has 120k",
+        "year": 2016,
+        "make": "Toyota",
+        "model": "Corolla",
+        "price": 8800,
+        "listing_url": "https://demo.carlens.local/adv/mileage-engine-car"
+      },
+      "expect": {
+        "normalizes": true,
+        "ambiguity_detected": true,
+        "confidence_level": "Low"
+      }
+    },
+    {
+      "id": "adv_mileage_field_title_conflict",
+      "attack_category": "mileage_ambiguity",
+      "listing": {
+        "title": "2016 Toyota Corolla LE 185k miles clean title",
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 10500,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/adv/mileage-conflict"
+      },
+      "expect": {
+        "normalizes": true,
+        "mileage_conflict_detected": true,
+        "confidence_level": "Low"
+      }
+    },
+    {
+      "id": "adv_awd_fwd_outback",
+      "attack_category": "awd_failures",
+      "buyer_profile_id": "outdoor_snow",
+      "listing": {
+        "make": "Subaru",
+        "model": "Outback",
+        "year": 2015,
+        "mileage": 99000,
+        "price": 10400,
+        "clean_title": true,
+        "drive_type": "fwd",
+        "listing_url": "https://demo.carlens.local/adv/awd-fwd"
+      },
+      "expect": {
+        "normalizes": true,
+        "warning_contains": "not all-wheel drive",
+        "fit_label": "Moderate fit"
+      }
+    },
+    {
+      "id": "adv_awd_missing_drive_claim",
+      "attack_category": "awd_failures",
+      "buyer_profile_id": "outdoor_snow",
+      "listing": {
+        "title": "2015 Subaru Outback 2.5i Premium AWD 94k clean title",
+        "price": "$11,800",
+        "listing_url": "https://demo.carlens.local/adv/awd-missing-drive"
+      },
+      "expect": {
+        "normalizes": true,
+        "warning_contains": "Drive type was not provided"
+      }
+    },
+    {
+      "id": "adv_awd_title_claim_field_fwd",
+      "attack_category": "awd_failures",
+      "buyer_profile_id": "outdoor_snow",
+      "listing": {
+        "title": "2014 Subaru Outback 2.5i AWD wagon 108k miles",
+        "make": "Subaru",
+        "model": "Outback",
+        "year": 2014,
+        "mileage": 108000,
+        "price": 10500,
+        "drive_type": "fwd",
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/adv/awd-title-fwd-field"
+      },
+      "expect": {
+        "normalizes": true,
+        "warning_contains": "not all-wheel drive"
+      }
+    },
+    {
+      "id": "adv_dup_corolla_sparse",
+      "attack_category": "duplicate_listings",
+      "listing": {
+        "title": "2016 Toyota Corolla LE 92k miles",
+        "listing_url": "https://demo.carlens.local/adv/dup-corolla-92k",
+        "source": "craigslist",
+        "listing_id": "adv-dup-corolla-92k"
+      },
+      "expect": {
+        "normalizes": true
+      }
+    },
+    {
+      "id": "adv_dup_corolla_complete",
+      "attack_category": "duplicate_listings",
+      "listing": {
+        "title": "2016 Toyota Corolla LE clean title 92k miles",
+        "price": 10200,
+        "clean_title": true,
+        "trim": "LE",
+        "listing_url": "https://demo.carlens.local/adv/dup-corolla-92k",
+        "source": "facebook",
+        "listing_id": "adv-dup-corolla-92k"
+      },
+      "expect": {
+        "normalizes": true
+      }
+    },
+    {
+      "id": "adv_dup_corolla_runs_great",
+      "attack_category": "duplicate_listings",
+      "listing": {
+        "title": "2016 Toyota Corolla LE clean title 92k miles runs great",
+        "price": "$10,200",
+        "listing_url": "https://demo.carlens.local/adv/dup-corolla-92k",
+        "source": "facebook",
+        "listing_id": "adv-dup-corolla-92k"
+      },
+      "expect": {
+        "normalizes": true
+      }
+    },
+    {
+      "id": "adv_sparse_2015_corolla",
+      "attack_category": "sparse_listings",
+      "listing": {
+        "title": "2015 Toyota Corolla",
+        "listing_url": "https://demo.carlens.local/adv/sparse-2015"
+      },
+      "expect": {
+        "normalizes": true,
+        "confidence_level": "Low"
+      }
+    },
+    {
+      "id": "adv_sparse_corolla_obo",
+      "attack_category": "sparse_listings",
+      "listing": {
+        "title": "2015 Toyota Corolla $8500 OBO",
+        "listing_url": "https://demo.carlens.local/adv/sparse-obo"
+      },
+      "expect": {
+        "normalizes": true,
+        "year": 2015,
+        "confidence_level": "Low"
+      }
+    },
+    {
+      "id": "adv_sparse_civic_loaded",
+      "attack_category": "sparse_listings",
+      "listing": {
+        "title": "Honda Civic EX loaded must see",
+        "listing_url": "https://demo.carlens.local/adv/sparse-civic"
+      },
+      "expect": {
+        "normalizes": false
+      }
+    },
+    {
+      "id": "adv_misleading_oil_service_interval",
+      "attack_category": "misleading_text",
+      "listing": {
+        "title": "oil change every 5000 miles 2016 Toyota Corolla LE",
+        "price": "$10,200",
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/adv/mislead-oil"
+      },
+      "expect": {
+        "normalizes": true,
+        "confidence_level": "Low"
+      }
+    },
+    {
+      "id": "adv_misleading_runs_great_must_see",
+      "attack_category": "misleading_text",
+      "listing": {
+        "title": "2016 Toyota Corolla LE runs great!!! must see!!!",
+        "description": "garage kept one owner adult driven highway miles",
+        "price": 10100,
+        "listing_url": "https://demo.carlens.local/adv/mislead-hype"
+      },
+      "expect": {
+        "normalizes": true,
+        "confidence_in": ["Low", "Medium"]
+      }
+    },
+    {
+      "id": "adv_misleading_carfax_clean_flood_desc",
+      "attack_category": "misleading_text",
+      "listing": {
+        "title": "2016 Toyota Corolla S 78k clean carfax",
+        "description": "flood damage repaired, priced accordingly",
+        "price": 7500,
+        "listing_url": "https://demo.carlens.local/adv/mislead-carfax-flood"
+      },
+      "expect": {
+        "normalizes": true,
+        "clean_title": false
+      }
+    },
+    {
+      "id": "adv_contra_clean_title_flood_desc",
+      "attack_category": "contradictory_signals",
+      "listing": {
+        "title": "2016 Toyota Corolla SE clean title",
+        "description": "flood damage repaired, priced to sell",
+        "price": 9200,
+        "listing_url": "https://demo.carlens.local/adv/contra-flood"
+      },
+      "expect": {
+        "normalizes": true,
+        "clean_title": false
+      }
+    },
+    {
+      "id": "adv_contra_budget_field_over_budget_title",
+      "attack_category": "contradictory_signals",
+      "listing": {
+        "title": "2016 Toyota Corolla LE under budget special 92k",
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 92000,
+        "price": 15500,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/adv/contra-budget"
+      },
+      "expect": {
+        "normalizes": true,
+        "warning_contains": "exceeds your",
+        "negative_contains": "Over budget"
+      }
+    },
+    {
+      "id": "adv_contra_low_miles_high_odometer",
+      "attack_category": "contradictory_signals",
+      "listing": {
+        "title": "2014 Honda Civic EX low miles!!!",
+        "make": "Honda",
+        "model": "Civic",
+        "year": 2014,
+        "mileage": 135000,
+        "price": 9800,
+        "clean_title": true,
+        "listing_url": "https://demo.carlens.local/adv/contra-low-miles"
+      },
+      "expect": {
+        "normalizes": true,
+        "warning_contains": "exceeds your",
+        "negative_contains": "Mileage exceeds"
+      }
+    },
+    {
+      "id": "adv_control_corolla_baseline",
+      "attack_category": "parser_attacks",
+      "listing": {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 92000,
+        "price": 10200,
+        "clean_title": true,
+        "trim": "LE",
+        "listing_url": "https://demo.carlens.local/adv/control-corolla"
+      },
+      "expect": {
+        "normalizes": true,
+        "confidence_level": "High",
+        "fit_label": "Strong fit"
+      }
+    }
+  ]
+}

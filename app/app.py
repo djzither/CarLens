@@ -55,7 +55,16 @@ DEMO_LISTING_SETS: dict[str, dict[str, str]] = {
         "label": "Messy Marketplace Demo",
         "filename": "messy_marketplace_demo.json",
     },
+    "adversarial": {
+        "label": "Adversarial Demo",
+        "filename": "adversarial_marketplace_demo.json",
+    },
 }
+
+ADVERSARIAL_DATASET_KEY = "adversarial"
+ADVERSARIAL_DATASET_WARNING = (
+    "Adversarial dataset: intentionally designed to stress-test trust and parsing"
+)
 
 _CONFIDENCE_COLORS = {
     "High": "#1b7f3a",
@@ -466,6 +475,8 @@ def main() -> None:
 
     ranked = payload["ranked"]
     pipeline = ranked["pipeline"]
+    if listing_dataset == ADVERSARIAL_DATASET_KEY:
+        st.warning(ADVERSARIAL_DATASET_WARNING)
     st.markdown(
         f"Pipeline: **{pipeline['raw_count']}** raw → "
         f"**{pipeline['normalized_count']}** normalized → "
