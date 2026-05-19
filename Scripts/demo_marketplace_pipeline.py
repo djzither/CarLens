@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -13,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.listings.listing_ranker import rank_listings_for_recommendations
+from src.listings.providers import MockListingProvider
 from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.recommendation_engine import recommend
 
@@ -24,14 +24,10 @@ MESSY_LISTINGS_PATH = SAMPLE_LISTINGS_DIR / "messy_marketplace_demo.json"
 def load_sample_listings(
     path: Path = DEFAULT_LISTINGS_PATH,
 ) -> tuple[str, list[tuple[str, dict[str, Any]]]]:
-    with path.open(encoding="utf-8") as handle:
-        data = json.load(handle)
-
-    buyer_profile_id = data["buyer_profile_id"]
-    scenarios: list[tuple[str, dict[str, Any]]] = []
-    for entry in data["listings"]:
-        scenarios.append((entry["id"], entry["listing"]))
-    return buyer_profile_id, scenarios
+    provider = MockListingProvider(path)
+    entries = provider.search_listings()
+    scenarios = [(entry["id"], entry["listing"]) for entry in entries]
+    return provider.buyer_profile_id, scenarios
 
 
 def _find_buyer(profiles: list[dict], buyer_profile_id: str) -> dict:
@@ -109,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         buyer_profile_id, scenarios = load_sample_listings(listings_path)
-    except (OSError, json.JSONDecodeError, KeyError) as exc:
+    except (OSError, ValueError, KeyError) as exc:
         print(f"Error loading sample listings: {exc}", file=sys.stderr)
         return 1
 

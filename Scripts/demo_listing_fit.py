@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -13,6 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.listings.listing_ranker import rank_listings_by_recommendation
+from src.listings.providers import MockListingProvider
 from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.recommendation_engine import recommend
 
@@ -22,13 +22,12 @@ SAMPLE_LISTINGS_PATH = PROJECT_ROOT / "data" / "sample_listings" / "student_list
 def load_sample_listings(
     path: Path = SAMPLE_LISTINGS_PATH,
 ) -> tuple[str, list[tuple[str, dict[str, Any]]], dict[str, str]]:
-    with path.open(encoding="utf-8") as handle:
-        data = json.load(handle)
-
-    buyer_profile_id = data["buyer_profile_id"]
+    provider = MockListingProvider(path)
+    entries = provider.search_listings()
+    buyer_profile_id = provider.buyer_profile_id
     scenarios: list[tuple[str, dict[str, Any]]] = []
     display_names: dict[str, str] = {}
-    for entry in data["listings"]:
+    for entry in entries:
         scenarios.append((entry["id"], entry["listing"]))
         name = entry.get("display_name")
         if name and str(name).strip():
@@ -211,7 +210,7 @@ def format_grouped_details(
 def main() -> int:
     try:
         buyer_profile_id, scenarios, display_names = load_sample_listings()
-    except (OSError, json.JSONDecodeError, KeyError) as exc:
+    except (OSError, ValueError, KeyError) as exc:
         print(f"Error loading sample listings: {exc}", file=sys.stderr)
         return 1
 
