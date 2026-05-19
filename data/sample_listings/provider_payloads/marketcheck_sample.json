@@ -1,0 +1,61 @@
+{
+  "num_found": 1,
+  "listings": [
+    {
+      "id": "mc-demo-civic-2016",
+      "vin": "19XFC2F59GE123456",
+      "heading": "2016 Honda Civic LX — one owner, clean Carfax",
+      "price": 10950,
+      "miles": 88000,
+      "msrp": 19950,
+      "data_source": "mc",
+      "source": "hondaportland.example",
+      "vdp_url": "https://dealer.example/marketcheck/2016-civic-lx",
+      "carfax_1_owner": true,
+      "carfax_clean_title": true,
+      "exterior_color": "Modern Steel Metallic",
+      "dom": 14,
+      "dom_active": 14,
+      "seller_type": "dealer",
+      "inventory_type": "used",
+      "last_seen_at": 1728000000,
+      "last_seen_at_date": "2025-10-03T12:00:00Z",
+      "scraped_at": 1727000000,
+      "scraped_at_date": "2025-09-22T08:30:00Z",
+      "dist": 8.2,
+      "media": {
+        "photo_links": [
+          "https://dealer-cdn.example/civic/front.jpg"
+        ],
+        "photo_links_cached": [
+          "https://photos.example/marketcheck/2016-civic-lx.jpg"
+        ]
+      },
+      "dealer": {
+        "id": 482910,
+        "website": "hondaportland.example",
+        "name": "Honda of Portland",
+        "dealer_type": "franchise",
+        "city": "Portland",
+        "state": "OR",
+        "zip": "97214",
+        "phone": "503-555-0100"
+      },
+      "build": {
+        "year": 2016,
+        "make": "Honda",
+        "model": "Civic",
+        "trim": "LX",
+        "body_type": "Sedan",
+        "vehicle_type": "Car",
+        "transmission": "CVT",
+        "drivetrain": "FWD",
+        "fuel_type": "Unleaded",
+        "engine": "2.0L I4",
+        "doors": 4,
+        "highway_mpg": 41,
+        "city_mpg": 31
+      }
+    }
+  ]
+}

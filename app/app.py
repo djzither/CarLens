@@ -49,6 +49,15 @@ from src.listings.listing_ranker import (
     rank_listings_for_recommendations,
 )
 from src.profiles.buyer_profile_loader import load_buyer_profiles
+from app.provider_mock_demo import (
+    PROVIDER_MOCK_BUYER_PROFILE_ID,
+    PROVIDER_PIPELINE_STEPS,
+    adapt_provider_payloads,
+    display_name_lookup,
+    listings_for_ranker as provider_listings_for_ranker,
+    raw_listing_lookup as provider_raw_listing_lookup,
+    run_provider_mock_pipeline,
+)
 from src.recommendation.recommendation_engine import recommend
 
 SAMPLE_LISTINGS_DIR = PROJECT_ROOT / "data" / "sample_listings"
@@ -66,9 +75,14 @@ DEMO_LISTING_SETS: dict[str, dict[str, str]] = {
         "label": "Adversarial Demo",
         "filename": "adversarial_marketplace_demo.json",
     },
+    "provider_mock": {
+        "label": "Mock Provider Payload Demo",
+        "filename": "",
+    },
 }
 
 ADVERSARIAL_DATASET_KEY = "adversarial"
+PROVIDER_MOCK_DATASET_KEY = "provider_mock"
 ADVERSARIAL_DATASET_WARNING = (
     "Adversarial dataset: intentionally designed to stress-test trust and parsing"
 )
@@ -88,6 +102,8 @@ def _find_buyer(profiles: list[dict[str, Any]], buyer_profile_id: str) -> dict[s
 
 
 def load_sample_listings(dataset_key: str) -> list[dict[str, Any]]:
+    if dataset_key == PROVIDER_MOCK_DATASET_KEY:
+        return adapt_provider_payloads()
     dataset = DEMO_LISTING_SETS[dataset_key]
     path = SAMPLE_LISTINGS_DIR / dataset["filename"]
     with path.open(encoding="utf-8") as handle:
@@ -255,6 +271,10 @@ def render_listing_summary(
                 else None
             ),
         )
+
+    title_text = listing.get("raw_title") or (raw_listing or {}).get("title")
+    if title_text and str(title_text).strip() and str(title_text).strip() != display_label:
+        st.caption(str(title_text).strip())
 
     st.markdown(format_listing_facts(listing))
 
@@ -509,17 +529,29 @@ def main() -> None:
         require_awd=require_awd,
     )
 
+    is_provider_mock = listing_dataset == PROVIDER_MOCK_DATASET_KEY
+
     try:
         loaded_listings = load_sample_listings(listing_dataset)
-    except (OSError, json.JSONDecodeError, KeyError) as exc:
+    except (OSError, json.JSONDecodeError, KeyError, ValueError) as exc:
         st.error(f"Could not load sample listings: {exc}")
         return
 
-    listings = _listings_for_ranker(loaded_listings)
-    raw_lookup = {item["id"]: item["listing"] for item in loaded_listings}
-    display_names = {
-        item["id"]: item.get("display_name") for item in loaded_listings
-    }
+    if is_provider_mock:
+        listings = provider_listings_for_ranker(loaded_listings)
+        raw_lookup = provider_raw_listing_lookup(loaded_listings)
+        display_names = display_name_lookup(loaded_listings)
+        if selected_id != PROVIDER_MOCK_BUYER_PROFILE_ID:
+            st.info(
+                f"Mock provider demo uses the **{PROVIDER_MOCK_BUYER_PROFILE_ID}** "
+                "buyer profile for recommendations."
+            )
+    else:
+        listings = _listings_for_ranker(loaded_listings)
+        raw_lookup = {item["id"]: item["listing"] for item in loaded_listings}
+        display_names = {
+            item["id"]: item.get("display_name") for item in loaded_listings
+        }
 
     prefs_key = (
         selected_id,
@@ -536,7 +568,14 @@ def main() -> None:
     )
     if needs_refresh:
         with st.spinner("Running recommendation pipeline…"):
-            payload = run_pipeline(selected_id, buyer, listings)
+            if is_provider_mock:
+                payload = run_provider_mock_pipeline(
+                    PROVIDER_MOCK_BUYER_PROFILE_ID,
+                    buyer,
+                    loaded=loaded_listings,
+                )
+            else:
+                payload = run_pipeline(selected_id, buyer, listings)
         st.session_state["ranked_payload"] = payload
         st.session_state["prefs_key"] = prefs_key
         st.session_state["compare_catalog"] = build_compare_catalog(
@@ -557,6 +596,15 @@ def main() -> None:
     pipeline = ranked["pipeline"]
     if listing_dataset == ADVERSARIAL_DATASET_KEY:
         st.warning(ADVERSARIAL_DATASET_WARNING)
+
+    if is_provider_mock:
+        st.info(
+            "Mock provider payload demo — nested Auto.dev and MarketCheck JSON only; "
+            "no live APIs or scraping."
+        )
+        with st.expander("Adapter pipeline (mock payloads)"):
+            for step_number, step in enumerate(PROVIDER_PIPELINE_STEPS, start=1):
+                st.markdown(f"{step_number}. {step}")
 
     for group in ranked["groups"]:
         render_vehicle_section(
@@ -593,6 +641,8 @@ def main() -> None:
     render_compare_mode(catalog)
 
     with st.expander("About this demo dataset"):
+        if is_provider_mock:
+            st.markdown("- Source: mocked `auto_dev_sample.json` + `marketcheck_sample.json`")
         st.markdown(
             f"- Listings loaded: **{pipeline['raw_count']}**"
         )

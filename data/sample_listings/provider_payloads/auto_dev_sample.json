@@ -1,0 +1,48 @@
+{
+  "data": [
+    {
+      "@id": "https://api.auto.dev/listings/5YFBURHE5GP123456",
+      "vin": "5YFBURHE5GP123456",
+      "distance": 12.4,
+      "location": [-122.6765, 45.5231],
+      "createdAt": "2025-09-14 14:04:06",
+      "updatedAt": "2025-10-02 09:15:00",
+      "vehicle": {
+        "vin": "5YFBURHE5GP123456",
+        "squishVin": "5YFBURHE5G",
+        "year": 2016,
+        "make": "Toyota",
+        "model": "Corolla",
+        "trim": "LE",
+        "drivetrain": "FWD",
+        "transmission": "Automatic",
+        "fuel": "Gasoline",
+        "doors": 4,
+        "seats": 5
+      },
+      "wholesaleListing": null,
+      "retailListing": {
+        "vdp": "https://dealer.example/auto-dev/2016-corolla-le",
+        "price": 10500,
+        "miles": 92000,
+        "used": true,
+        "cpo": false,
+        "dealer": "Pacific Northwest Motors",
+        "city": "Portland",
+        "state": "OR",
+        "zip": "97201",
+        "primaryImage": "https://photos.example/auto-dev/2016-corolla-le.jpg",
+        "photoCount": 18
+      },
+      "history": {
+        "accidents": false,
+        "ownerCount": 2
+      }
+    }
+  ],
+  "links": {
+    "self": "https://api.auto.dev/listings?vehicle.make=Toyota&vehicle.model=Corolla&limit=20",
+    "next": "https://api.auto.dev/listings?vehicle.make=Toyota&vehicle.model=Corolla&page=2&limit=20",
+    "first": "https://api.auto.dev/listings?vehicle.make=Toyota&vehicle.model=Corolla&limit=20"
+  }
+}
