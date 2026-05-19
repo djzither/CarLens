@@ -9,6 +9,15 @@ from src.listings.providers.types import SearchFilters, SearchResult
 
 _REQUIRED_FIELDS = ("make", "model", "year", "price")
 _ID_FIELDS = ("id", "listing_id")
+_OPTIONAL_FIELDS = (
+    "mileage",
+    "clean_title",
+    "title_status",
+    "image_url",
+    "source_url",
+    "days_on_market",
+    "accident_history",
+)
 
 _DIRTY_TITLE_STATUSES = frozenset({"dirty", "salvage", "rebuilt"})
 
@@ -20,6 +29,21 @@ def _field_present(raw: dict[str, Any], field: str) -> bool:
     if isinstance(value, str) and not value.strip():
         return False
     return True
+
+
+def skipped_listing_warning(entry_id: str, validation_errors: list[str]) -> str:
+    """Warning for a listing skipped due to failed validation."""
+    detail = ", ".join(validation_errors)
+    return f"{entry_id}: skipped — {detail}"
+
+
+def incomplete_listing_warnings(entry_id: str, raw: dict[str, Any]) -> list[str]:
+    """Warnings for optional fields missing on an otherwise valid listing."""
+    return [
+        f"{entry_id}: missing optional {field}"
+        for field in _OPTIONAL_FIELDS
+        if not _field_present(raw, field)
+    ]
 
 
 def is_dirty_title(listing: dict[str, Any]) -> bool:

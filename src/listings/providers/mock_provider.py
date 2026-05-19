@@ -6,7 +6,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from src.listings.providers.base import ListingProvider, is_dirty_title
+from src.listings.providers.base import (
+    ListingProvider,
+    incomplete_listing_warnings,
+    is_dirty_title,
+    skipped_listing_warning,
+)
 from src.listings.providers.provenance import attach_listing_provenance
 from src.listings.providers.types import SearchFilters, SearchResult
 
@@ -123,16 +128,17 @@ class MockListingProvider(ListingProvider):
 
     def search(self, filters: SearchFilters) -> SearchResult:
         matched: list[dict[str, Any]] = []
-        errors: list[str] = []
+        warnings: list[str] = []
 
         for entry in self._entries:
             entry_id = str(entry.get("id", "unknown"))
             raw = _raw_for_validation(entry)
             valid, validation_errors = self.validate_listing(raw)
             if not valid:
-                errors.append(f"{entry_id}: {', '.join(validation_errors)}")
+                warnings.append(skipped_listing_warning(entry_id, validation_errors))
                 continue
             if _matches_filters(entry, filters):
+                warnings.extend(incomplete_listing_warnings(entry_id, raw))
                 matched.append(
                     attach_listing_provenance(entry, provider_name=self.name)
                 )
@@ -140,7 +146,7 @@ class MockListingProvider(ListingProvider):
         return SearchResult(
             listings=matched,
             provider_name=self.name,
-            errors=errors,
+            provider_warnings=warnings,
             total_available=len(self._entries),
         )
 

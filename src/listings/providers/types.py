@@ -24,5 +24,6 @@ class SearchResult:
 
     listings: list[dict] = field(default_factory=list)
     provider_name: str = ""
+    provider_warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     total_available: int | None = None

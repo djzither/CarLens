@@ -192,12 +192,16 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Matched listings: {len(search_result.listings)}")
     if search_result.total_available is not None:
         print(f"Total in sample file: {search_result.total_available}")
+    if search_result.provider_warnings:
+        print(f"Provider warnings: {len(search_result.provider_warnings)}")
+        for warning in search_result.provider_warnings[:5]:
+            print(f"  - {warning}")
+        if len(search_result.provider_warnings) > 5:
+            print(f"  ... and {len(search_result.provider_warnings) - 5} more")
     if search_result.errors:
-        print(f"Validation errors: {len(search_result.errors)}")
+        print(f"Provider errors: {len(search_result.errors)}")
         for err in search_result.errors[:5]:
             print(f"  - {err}")
-        if len(search_result.errors) > 5:
-            print(f"  ... and {len(search_result.errors) - 5} more")
 
     for entry in search_result.listings[:8]:
         listing = entry["listing"]

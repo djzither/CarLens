@@ -132,13 +132,65 @@ def test_salvage_title_status_excluded_when_clean_title_only(
     assert "salvage_status_corolla" not in _ids(result.listings)
 
 
-def test_invalid_listing_skipped_and_records_error(
+def test_invalid_listing_skipped_and_records_warning(
     provider: MockListingProvider,
 ) -> None:
     result = provider.search(SearchFilters(make="Toyota", model="Corolla"))
     assert "missing_price_corolla" not in _ids(result.listings)
-    assert any("missing_price_corolla" in err for err in result.errors)
-    assert any("price" in err for err in result.errors)
+    assert any("missing_price_corolla" in w for w in result.provider_warnings)
+    assert any("skipped" in w and "price" in w for w in result.provider_warnings)
+
+
+def test_missing_required_fields_skipped(provider: MockListingProvider) -> None:
+    provider._entries.append(
+        {
+            "id": "no_year_listing",
+            "listing": {"make": "Toyota", "model": "Corolla", "price": 9000},
+        }
+    )
+    result = provider.search(SearchFilters(make="Toyota", model="Corolla"))
+    assert "no_year_listing" not in _ids(result.listings)
+    assert any("no_year_listing" in w and "skipped" in w for w in result.provider_warnings)
+
+
+def test_valid_listings_return_when_invalid_exist(provider: MockListingProvider) -> None:
+    provider._entries.append(
+        {
+            "id": "broken_listing",
+            "listing": {"make": "Toyota", "model": "Corolla"},
+        }
+    )
+    result = provider.search(SearchFilters(make="Toyota", model="Corolla"))
+    assert "good_corolla" in _ids(result.listings)
+    assert len(result.listings) >= 10
+    assert any("broken_listing" in w for w in result.provider_warnings)
+
+
+def test_incomplete_valid_listing_emits_optional_warnings(
+    provider: MockListingProvider,
+) -> None:
+    result = provider.search(SearchFilters(make="Toyota", model="Corolla"))
+    assert "missing_mileage_corolla" in _ids(result.listings)
+    assert any(
+        "missing_mileage_corolla" in w and "mileage" in w
+        for w in result.provider_warnings
+    )
+
+
+def test_provenance_on_valid_listings_when_invalid_exist(
+    provider: MockListingProvider,
+) -> None:
+    provider._entries.append(
+        {
+            "id": "no_price_listing",
+            "listing": {"make": "Toyota", "model": "Corolla", "year": 2016},
+        }
+    )
+    result = provider.search(SearchFilters(make="Toyota", model="Corolla"))
+    entry = next(e for e in result.listings if e["id"] == "good_corolla")
+    assert entry["provider_name"] == "mock"
+    assert entry["provider_listing_id"] == "good_corolla"
+    assert entry["provider_raw_fields"]
 
 
 def test_validate_listing_requires_id_and_core_fields(
