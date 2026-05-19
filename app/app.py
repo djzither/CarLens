@@ -18,6 +18,7 @@ from listing_display import (
     build_ranking_explanation_lines,
     build_watchouts,
     format_listing_facts,
+    format_listing_source_markdown,
     format_recommended_because,
     format_score_caption,
     qualifies_as_top_pick,
@@ -212,7 +213,19 @@ def render_listing_summary(
     st.markdown(format_listing_facts(listing))
     st.caption(format_score_caption(fit))
 
-    st.markdown("**Why it ranks well:**")
+    # TODO: Fetch listing images from marketplace sources when image pipeline exists.
+    image_url = listing.get("image_url")
+    if image_url:
+        st.image(str(image_url))
+
+    # TODO: Add geocoding for distance_miles when location pipeline exists.
+    distance_miles = listing.get("distance_miles")
+    if distance_miles is not None:
+        st.caption(f"{int(distance_miles):,} mi away")
+
+    st.markdown(format_listing_source_markdown(listing))
+
+    st.markdown("**Why it may fit**")
     positives = fit.get("positive_reasons") or []
     if positives:
         for reason in positives:
@@ -220,8 +233,8 @@ def render_listing_summary(
     else:
         st.markdown("- None")
 
-    st.markdown("**Watchouts:**")
-    watchouts = build_watchouts(fit)
+    st.markdown("**Watchouts**")
+    watchouts = build_watchouts(fit, listing)
     if watchouts:
         for item in watchouts:
             st.markdown(f"- {item}")
@@ -229,22 +242,9 @@ def render_listing_summary(
         st.markdown("- None")
 
     with st.expander("Listing details & debug"):
-        if fit.get("warnings"):
-            st.markdown("**Warnings**")
-            for warning in fit["warnings"]:
-                st.markdown(f"- {warning}")
-
         st.markdown("**Scoring reasons**")
         for reason in fit.get("reasons") or ["(none)"]:
             st.markdown(f"- {reason}")
-
-        st.markdown("**Negative reasons (structured)**")
-        negatives = fit.get("negative_reasons") or []
-        if negatives:
-            for reason in negatives:
-                st.markdown(f"- {reason}")
-        else:
-            st.markdown("- (none)")
 
         if fit.get("label_was_capped"):
             st.caption("Fit label was capped below the raw score band.")
@@ -253,10 +253,7 @@ def render_listing_summary(
         for key, value in confidence.items():
             st.markdown(f"- {key}: {value}")
 
-        url = listing.get("listing_url")
-        if url:
-            st.markdown(f"[View listing source]({url})")
-        elif listing.get("source"):
+        if listing.get("source"):
             st.caption(f"Source: {listing['source']}")
 
 

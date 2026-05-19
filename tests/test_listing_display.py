@@ -1,16 +1,24 @@
 from __future__ import annotations
 
 from app.listing_display import (
+    WATCHOUT_MISSING_MILEAGE,
+    WATCHOUT_MISSING_PRICE,
     build_watchouts,
     format_listing_facts,
+    format_listing_source_markdown,
     format_mileage,
     format_recommended_because,
     has_major_warnings,
+    listing_source_url,
     qualifies_as_top_pick,
     top_pick_banner_text,
     warning_is_major,
 )
-from src.listings.listing_fit import DIRTY_TITLE_WARNING
+from src.listings.listing_fit import (
+    DIRTY_TITLE_WARNING,
+    MISSING_MILEAGE_WARNING,
+    MISSING_PRICE_WARNING,
+)
 
 
 def _strong_entry(*, warnings: list[str] | None = None, clean_title: bool = True) -> dict:
@@ -57,10 +65,67 @@ def test_format_recommended_because_uses_traits():
     assert format_recommended_because(recommendation) == "reliable"
 
 
-def test_build_watchouts_uses_negative_reasons():
+def test_build_watchouts_includes_missing_price():
     entry = _strong_entry()
-    entry["fit"]["negative_reasons"] = ["Mileage exceeds preferred max by 5,000"]
-    assert build_watchouts(entry["fit"]) == ["Mileage exceeds preferred max by 5,000"]
+    entry["listing"].pop("price")
+    entry["fit"]["warnings"] = [MISSING_PRICE_WARNING]
+
+    watchouts = build_watchouts(entry["fit"], entry["listing"])
+
+    assert watchouts == [WATCHOUT_MISSING_PRICE]
+
+
+def test_build_watchouts_includes_missing_mileage():
+    entry = _strong_entry()
+    entry["listing"].pop("mileage")
+    entry["fit"]["warnings"] = [MISSING_MILEAGE_WARNING]
+
+    watchouts = build_watchouts(entry["fit"], entry["listing"])
+
+    assert watchouts == [WATCHOUT_MISSING_MILEAGE]
+
+
+def test_build_watchouts_dedupes_price_and_negative_reasons():
+    entry = _strong_entry()
+    entry["listing"].pop("price")
+    entry["fit"]["warnings"] = [MISSING_PRICE_WARNING]
+    entry["fit"]["negative_reasons"] = ["Over budget by $2,000"]
+
+    watchouts = build_watchouts(entry["fit"], entry["listing"])
+
+    assert watchouts[0] == WATCHOUT_MISSING_PRICE
+    assert "Over budget" in watchouts[1]
+    assert MISSING_PRICE_WARNING not in watchouts
+    assert len(watchouts) == 2
+
+
+def test_build_watchouts_combines_warnings_and_negatives_without_dupes():
+    entry = _strong_entry()
+    entry["fit"]["warnings"] = [DIRTY_TITLE_WARNING]
+    entry["fit"]["negative_reasons"] = ["Dirty title"]
+
+    watchouts = build_watchouts(entry["fit"], entry["listing"])
+
+    assert len(watchouts) == 1
+    assert "Dirty title" in watchouts[0] or "clean title" in watchouts[0].casefold()
+
+
+def test_listing_source_url_requires_http_scheme():
+    listing = {"listing_url": "https://demo.carlens.local/listing/1"}
+    assert listing_source_url(listing) == "https://demo.carlens.local/listing/1"
+    assert listing_source_url({"listing_url": "not-a-url"}) is None
+    assert listing_source_url({}) is None
+
+
+def test_format_listing_source_markdown_view_listing():
+    listing = {"listing_url": "https://demo.carlens.local/listing/1"}
+    assert format_listing_source_markdown(listing) == (
+        "[View listing](https://demo.carlens.local/listing/1)"
+    )
+
+
+def test_format_listing_source_markdown_without_url():
+    assert format_listing_source_markdown({}) == "No source link"
 
 
 def test_warning_is_major_detects_dirty_title():

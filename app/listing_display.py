@@ -32,6 +32,59 @@ _MAJOR_WARNING_MARKERS = (
     NOT_AWD_WARNING,
 )
 
+WATCHOUT_MISSING_PRICE = "Price not listed — cannot verify budget fit"
+WATCHOUT_MISSING_MILEAGE = "Mileage not listed — cannot verify usage/risk"
+
+_WATCHOUT_DEDUPE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "price_missing",
+        (
+            "price not listed",
+            "price was not provided",
+            "cannot verify budget fit",
+        ),
+    ),
+    (
+        "mileage_missing",
+        (
+            "mileage not listed",
+            "mileage not disclosed",
+            "odometer reading unavailable",
+            "cannot verify usage",
+        ),
+    ),
+    (
+        "title_dirty",
+        (
+            "dirty title",
+            "does not have a clean title",
+            "salvage",
+            "rebuilt title",
+            "flood damage",
+            "flood title",
+        ),
+    ),
+    (
+        "title_undisclosed",
+        (
+            "title status not disclosed",
+            "verify clean title before purchase",
+            "verify before purchase",
+        ),
+    ),
+    (
+        "awd_requirement",
+        (
+            "does not meet awd",
+            "awd required",
+            "all-wheel drive",
+            "4wd",
+            "drive type not disclosed",
+            "drive type was not provided",
+        ),
+    ),
+)
+
 RANKING_ORDER_LINES: tuple[str, ...] = (
     "Listings are ordered by fit label (Strong fit, then Moderate, then Weak).",
     "When fit is similar, higher confidence (High, then Medium, then Low) ranks higher.",
@@ -92,9 +145,82 @@ def format_listing_facts(listing: dict[str, Any]) -> str:
     )
 
 
-def build_watchouts(fit: dict[str, Any]) -> list[str]:
-    """Buyer-facing watchouts from structured negatives (warnings stay in details)."""
-    return list(fit.get("negative_reasons") or [])
+def _normalize_watchout_key(text: str) -> str:
+    return " ".join(str(text).casefold().split())
+
+
+def _watchout_dedupe_group(text: str) -> str | None:
+    lowered = str(text).casefold()
+    for group_name, markers in _WATCHOUT_DEDUPE_GROUPS:
+        if any(marker in lowered for marker in markers):
+            if group_name == "price_missing" and (
+                "exceed" in lowered or "over budget" in lowered
+            ):
+                continue
+            if group_name == "mileage_missing" and (
+                "exceed" in lowered or "exceeds preferred" in lowered
+            ):
+                continue
+            return group_name
+    return None
+
+
+def _dedupe_watchouts(items: list[str]) -> list[str]:
+    """Drop exact and topical duplicates while preserving first-seen order."""
+    deduped: list[str] = []
+    seen_exact: set[str] = set()
+    seen_groups: set[str] = set()
+
+    for item in items:
+        text = str(item).strip()
+        if not text:
+            continue
+        exact_key = _normalize_watchout_key(text)
+        if exact_key in seen_exact:
+            continue
+        group = _watchout_dedupe_group(text)
+        if group is not None and group in seen_groups:
+            continue
+        seen_exact.add(exact_key)
+        if group is not None:
+            seen_groups.add(group)
+        deduped.append(text)
+
+    return deduped
+
+
+def build_watchouts(fit: dict[str, Any], listing: dict[str, Any]) -> list[str]:
+    """Unified buyer-facing watchouts: warnings, negatives, and missing-field gaps."""
+    candidates: list[str] = []
+
+    if listing.get("price") is None:
+        candidates.append(WATCHOUT_MISSING_PRICE)
+    if listing.get("mileage") is None:
+        candidates.append(WATCHOUT_MISSING_MILEAGE)
+
+    candidates.extend(fit.get("warnings") or [])
+    candidates.extend(fit.get("negative_reasons") or [])
+
+    return _dedupe_watchouts(candidates)
+
+
+def listing_source_url(listing: dict[str, Any]) -> str | None:
+    """Return a safe listing URL when explicitly provided."""
+    url = listing.get("listing_url")
+    if url is None:
+        return None
+    text = str(url).strip()
+    if text.startswith(("http://", "https://")):
+        return text
+    return None
+
+
+def format_listing_source_markdown(listing: dict[str, Any]) -> str:
+    """Markdown for the listing source line on a card."""
+    url = listing_source_url(listing)
+    if url:
+        return f"[View listing]({url})"
+    return "No source link"
 
 
 def has_dirty_title(listing: dict[str, Any]) -> bool:
