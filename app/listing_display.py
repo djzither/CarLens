@@ -33,19 +33,34 @@ _MAJOR_WARNING_MARKERS = (
     NOT_AWD_WARNING,
 )
 
-WATCHOUT_MISSING_PRICE = "Price not listed — cannot verify budget fit"
-WATCHOUT_MISSING_MILEAGE = "Mileage not listed — cannot verify wear/usage"
+CAUTION_PREFIX = "⚠️ CAUTION:"
+
+
+def format_caution_warning(detail: str) -> str:
+    """Buyer-facing caution line with a consistent prefix."""
+    text = str(detail).strip()
+    if text.startswith(CAUTION_PREFIX):
+        return text
+    if text.startswith("⚠️ CAUTION"):
+        text = text.split(":", 1)[-1].strip()
+    return f"{CAUTION_PREFIX} {text}"
+
+
+WATCHOUT_MISSING_PRICE = format_caution_warning(
+    "Price not listed — cannot verify budget fit"
+)
+WATCHOUT_MISSING_MILEAGE = format_caution_warning(
+    "Mileage not listed — cannot verify wear/usage"
+)
+WATCHOUT_VERIFY_TITLE = format_caution_warning("Verify title before purchase")
 STRONG_FIT_LOW_CONFIDENCE_HEADLINE = "⚠ Strong fit but low data confidence"
 STRONG_FIT_LOW_CONFIDENCE_CAPTION = (
     "Good overall match but missing important information. "
     "Verify details before purchase."
 )
-DIRTY_TITLE_BANNER = (
-    "Dirty or branded title reported — verify title status before purchase."
-)
-SELLER_TITLE_CONFLICT_WARNING = (
-    "Seller's title/description conflict — verify title status independently "
-    "before purchase."
+DIRTY_TITLE_BANNER = WATCHOUT_VERIFY_TITLE
+SELLER_TITLE_CONFLICT_WARNING = format_caution_warning(
+    "Seller title/description conflict — verify title before purchase"
 )
 
 _WATCHOUT_DEDUPE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -119,7 +134,7 @@ SUMMARY_BADGE_TOP_PICK: tuple[str, str] = (
 SUMMARY_BADGE_CAUTION: tuple[str, str] = (
     "⚠️ CAUTION",
     "Verify title before purchase",
-)
+)  # subtitle only; use format_summary_badge_line for full caution text
 SUMMARY_BADGE_BUDGET: tuple[str, str] = (
     "💰 BUDGET OPTION",
     "Lowest-cost strong match",
@@ -543,6 +558,22 @@ def _dedupe_watchouts(items: list[str]) -> list[str]:
     return deduped
 
 
+def _normalize_watchout_message(text: str) -> str:
+    """Map scoring warnings and field gaps to consistent caution-prefixed copy."""
+    group = _watchout_dedupe_group(text)
+    if group == "mileage_missing":
+        return WATCHOUT_MISSING_MILEAGE
+    if group == "price_missing":
+        return WATCHOUT_MISSING_PRICE
+    if group in ("title_dirty", "title_undisclosed"):
+        return WATCHOUT_VERIFY_TITLE
+    if group == "seller_title_conflict":
+        return SELLER_TITLE_CONFLICT_WARNING
+    if str(text).strip().startswith(CAUTION_PREFIX):
+        return str(text).strip()
+    return str(text).strip()
+
+
 def build_watchouts(
     fit: dict[str, Any],
     listing: dict[str, Any],
@@ -560,8 +591,10 @@ def build_watchouts(
     if listing.get("mileage") is None:
         candidates.append(WATCHOUT_MISSING_MILEAGE)
 
-    candidates.extend(fit.get("warnings") or [])
-    candidates.extend(fit.get("negative_reasons") or [])
+    for warning in fit.get("warnings") or []:
+        candidates.append(_normalize_watchout_message(warning))
+    for reason in fit.get("negative_reasons") or []:
+        candidates.append(_normalize_watchout_message(reason))
 
     return _dedupe_watchouts(candidates)
 
@@ -700,6 +733,8 @@ def format_summary_badge_line(badge: tuple[str, str] | None) -> str | None:
     if badge is None:
         return None
     label, subtitle = badge
+    if label == "⚠️ CAUTION":
+        return format_caution_warning(subtitle)
     return f"**{label}:** {subtitle}"
 
 

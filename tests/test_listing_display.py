@@ -8,8 +8,11 @@ from app.listing_display import (
     SUMMARY_BADGE_TOP_PICK,
     STRONG_FIT_LOW_CONFIDENCE_CAPTION,
     STRONG_FIT_LOW_CONFIDENCE_HEADLINE,
+    CAUTION_PREFIX,
     WATCHOUT_MISSING_MILEAGE,
     WATCHOUT_MISSING_PRICE,
+    WATCHOUT_VERIFY_TITLE,
+    format_caution_warning,
     build_watchouts,
     budget_option_listing_names,
     detect_seller_title_conflict,
@@ -188,6 +191,17 @@ def test_build_watchouts_includes_missing_mileage():
     assert watchouts == [WATCHOUT_MISSING_MILEAGE]
 
 
+def test_missing_mileage_watchout_uses_caution_prefix():
+    assert WATCHOUT_MISSING_MILEAGE.startswith(CAUTION_PREFIX)
+    assert "Mileage not listed" in WATCHOUT_MISSING_MILEAGE
+
+
+def test_title_watchout_uses_caution_prefix():
+    assert WATCHOUT_VERIFY_TITLE.startswith(CAUTION_PREFIX)
+    assert WATCHOUT_VERIFY_TITLE.endswith("Verify title before purchase")
+    assert format_summary_badge_line(SUMMARY_BADGE_CAUTION) == WATCHOUT_VERIFY_TITLE
+
+
 def test_build_watchouts_dedupes_price_and_negative_reasons():
     entry = _strong_entry()
     entry["listing"].pop("price")
@@ -210,11 +224,13 @@ def test_build_watchouts_combines_warnings_and_negatives_without_dupes():
     watchouts = build_watchouts(entry["fit"], entry["listing"])
 
     assert len(watchouts) == 1
-    assert "Dirty title" in watchouts[0] or "clean title" in watchouts[0].casefold()
+    assert watchouts[0].startswith(CAUTION_PREFIX)
+    assert watchouts[0] == WATCHOUT_VERIFY_TITLE
 
 
-def test_dirty_title_banner_constant_is_prominent_copy():
-    assert "verify title status" in DIRTY_TITLE_BANNER.casefold()
+def test_dirty_title_banner_matches_caution_title_warning():
+    assert DIRTY_TITLE_BANNER == WATCHOUT_VERIFY_TITLE
+    assert DIRTY_TITLE_BANNER.startswith(CAUTION_PREFIX)
 
 
 def test_listing_source_url_requires_http_scheme():
@@ -326,6 +342,9 @@ def test_resolve_summary_badge_caution_for_dirty_title():
     entry["fit"]["warnings"] = []
     badge = resolve_listing_summary_badge(entry, rank=2)
     assert badge == SUMMARY_BADGE_CAUTION
+    line = format_summary_badge_line(badge)
+    assert line.startswith(CAUTION_PREFIX)
+    assert line == WATCHOUT_VERIFY_TITLE
 
 
 def test_budget_option_listing_names_picks_lowest_strong_under_budget():
