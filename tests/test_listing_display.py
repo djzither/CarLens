@@ -28,6 +28,7 @@ from app.listing_display import (
     format_listing_data_details_lines,
     format_listing_facts,
     format_listing_quality_metrics,
+    format_provider_attribution_html,
     format_listing_source_markdown,
     format_title_status_block,
     format_trust_with_explanation,
@@ -461,10 +462,15 @@ def test_format_listing_quality_metrics_separates_fit_and_data() -> None:
     summary = resolve_listing_quality_summary(entry)
     metrics = format_listing_quality_metrics(summary)
 
-    assert "**Source:** Mock" in metrics
     assert "**Fit:** Strong" in metrics
     assert "**Data quality:** High" in metrics
+    assert "**Source:**" not in metrics
     assert "**Title:**" not in metrics
+
+    entry["provider_name"] = "marketcheck"
+    html = format_provider_attribution_html(entry)
+    assert html is not None
+    assert "via MarketCheck" in html
 
 
 def test_strong_fit_medium_data_quality_on_card_entry() -> None:

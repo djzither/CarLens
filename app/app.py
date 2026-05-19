@@ -37,6 +37,7 @@ from listing_display import (
     format_listing_card_tagline,
     format_listing_data_details_lines,
     format_listing_quality_metrics,
+    format_provider_attribution_html,
     format_listing_source_markdown,
     format_positive_reasons_for_display,
     format_recommended_because,
@@ -59,8 +60,13 @@ from src.listings.listing_compare import (
     compare_checkbox_key,
     compare_id_from_checkbox_key,
     count_selected_compare,
+    favorite_button_key,
+    generate_beats_other_sentence,
+    get_saved_listing_ids,
+    is_listing_saved,
     make_compare_id,
     resolve_compare_entries,
+    toggle_saved_listing,
     validate_compare_selection,
 )
 from src.listings.listing_confidence import assess_listing_confidence
@@ -452,7 +458,7 @@ def render_listing_summary(
         rank=rank,
         raw_listing=raw_listing,
     )
-    header_cols = st.columns([6, 1])
+    header_cols = st.columns([5, 1, 1])
     with header_cols[0]:
         st.markdown(f"**{title_line}**")
         st.markdown(
@@ -469,6 +475,9 @@ def render_listing_summary(
             )
         )
         st.markdown(format_listing_quality_metrics(quality))
+        provider_line = format_provider_attribution_html(entry)
+        if provider_line:
+            st.markdown(provider_line, unsafe_allow_html=True)
         title_alert = title_status_alert(alerts)
         if title_alert is not None:
             _render_title_status(title_alert)
@@ -481,6 +490,16 @@ def render_listing_summary(
             for reason in scoring_reasons:
                 st.markdown(f"- {reason}")
     with header_cols[1]:
+        saved = is_listing_saved(st.session_state, compare_id)
+        save_label = "Saved" if saved else "Save"
+        if st.button(
+            save_label,
+            key=favorite_button_key(compare_id),
+            help="Save to favorites for this session only.",
+        ):
+            toggle_saved_listing(st.session_state, compare_id)
+            st.rerun()
+    with header_cols[2]:
         st.checkbox(
             "Compare",
             key=checkbox_key,
@@ -657,8 +676,23 @@ def render_compare_mode(catalog: dict[str, dict[str, Any]]) -> None:
     )
     st.success(
         f"**Best option:** {best_label} — "
-        f"{best_row['fit_label']} ({best_row['confidence']} trust)"
+        f"{best_row['fit_quality']} fit · {best_row['data_quality']} data quality"
     )
+
+    st.markdown("**Why this beats the other option**")
+    others = [entry for entry in entries if entry is not best]
+    if len(entries) == 2 and len(others) == 1:
+        st.markdown(generate_beats_other_sentence(best, others[0]))
+    else:
+        for other in others:
+            other_label = resolve_listing_display_name(
+                other,
+                other.get("raw_listing"),
+            )
+            st.markdown(
+                f"- vs **{other_label}:** "
+                f"{generate_beats_other_sentence(best, other)}"
+            )
 
     header_cols = st.columns([1] + [1] * len(entries))
     header_cols[0].markdown("**Field**")
@@ -666,10 +700,7 @@ def render_compare_mode(catalog: dict[str, dict[str, Any]]) -> None:
         label = resolve_listing_display_name(entry, entry.get("raw_listing"))
         header_cols[index + 1].markdown(f"**{label}**")
 
-    compare_rows = [
-        row for row in COMPARE_TABLE_ROWS if row[0] not in {"score"}
-    ]
-    for field_key, field_label in compare_rows:
+    for field_key, field_label in COMPARE_TABLE_ROWS:
         cols = st.columns([1] + [1] * len(entries))
         cols[0].markdown(f"**{field_label}**")
         for index, row in enumerate(rows):
@@ -722,6 +753,7 @@ def render_unmatched_listings(
 
 def render_compare_sidebar_hint() -> None:
     selected_count = count_selected_compare(st.session_state)
+    saved_count = len(get_saved_listing_ids(st.session_state))
     st.divider()
     st.markdown("**Compare mode**")
     st.caption(
@@ -732,6 +764,12 @@ def render_compare_sidebar_hint() -> None:
         st.warning(
             f"Too many listings selected. Compare at most {MAX_COMPARE_LISTINGS}."
         )
+    st.markdown("**Saved listings**")
+    st.caption(
+        f"{saved_count} saved this session"
+        if saved_count
+        else "Use Save on a card to favorite listings"
+    )
 
 
 def main() -> None:

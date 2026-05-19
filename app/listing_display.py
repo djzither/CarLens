@@ -1155,11 +1155,38 @@ def format_provider_name_label(provider_name: str) -> str:
 
 
 def format_listing_quality_metrics(summary: dict[str, Any]) -> str:
-    """Single compact line: source, fit, and data quality (title shown separately)."""
+    """Single compact line: fit and data quality (provider shown separately)."""
     fit = _FIT_QUALITY_LABELS.get(str(summary.get("fit_quality", "")), "—")
     data = _DATA_QUALITY_LABELS.get(str(summary.get("data_quality_level", "")), "—")
-    source = format_provider_name_label(str(summary.get("source", "")))
-    return f"**Source:** {source} · **Fit:** {fit} · **Data quality:** {data}"
+    return f"**Fit:** {fit} · **Data quality:** {data}"
+
+
+_PROVIDER_MARKS: dict[str, str] = {
+    "auto.dev": "◆",
+    "marketcheck": "◆",
+    "facebook_marketplace": "◇",
+    "craigslist": "◇",
+}
+
+
+def format_provider_attribution_html(entry: dict[str, Any]) -> str | None:
+    """Subtle provider source line for listing cards (no external assets)."""
+    listing = entry.get("listing") or {}
+    source = (
+        entry.get("provider_name")
+        or entry.get("provider")
+        or listing.get("source")
+    )
+    if not source or str(source).strip().casefold() in ("", "unknown"):
+        return None
+    key = str(source).strip()
+    label = format_provider_name_label(key)
+    mark = _PROVIDER_MARKS.get(key, "")
+    prefix = f"{mark} " if mark else ""
+    return (
+        f"<p style='margin:0.15rem 0 0;color:#6b7280;font-size:0.78rem;"
+        f"letter-spacing:0.02em'>{prefix}via {label}</p>"
+    )
 
 
 def format_listing_data_details_lines(summary: dict[str, Any]) -> list[str]:
