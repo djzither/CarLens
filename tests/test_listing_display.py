@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from app.listing_display import (
+    DIRTY_TITLE_BANNER,
+    SELLER_TITLE_CONFLICT_WARNING,
     WATCHOUT_MISSING_MILEAGE,
     WATCHOUT_MISSING_PRICE,
     build_watchouts,
+    detect_seller_title_conflict,
     format_listing_facts,
     format_listing_source_markdown,
     format_mileage,
@@ -11,6 +14,7 @@ from app.listing_display import (
     has_major_warnings,
     listing_source_url,
     qualifies_as_top_pick,
+    resolve_listing_display_name,
     top_pick_banner_text,
     warning_is_major,
 )
@@ -48,21 +52,103 @@ def test_format_mileage_uses_k_suffix():
     assert format_mileage(None) == "Mileage not listed"
 
 
-def test_format_listing_facts_joins_price_mileage_title():
-    facts = format_listing_facts(_strong_entry()["listing"])
+def test_format_listing_facts_omits_dirty_title_from_facts_row():
+    listing = _strong_entry(clean_title=False)["listing"]
+    facts = format_listing_facts(listing)
+    assert "Dirty title" not in facts
     assert "$9,500" in facts
-    assert "92k miles" in facts
-    assert "Clean title" in facts
+
+
+def test_format_listing_facts_omits_missing_price_and_mileage():
+    listing = {
+        "year": 2016,
+        "make": "Toyota",
+        "model": "Corolla",
+        "clean_title": True,
+    }
+    facts = format_listing_facts(listing)
+    assert "Price not listed" not in facts
+    assert "Mileage not listed" not in facts
 
 
 def test_format_recommended_because_uses_traits():
     recommendation = {
+        "make": "Toyota",
+        "model": "Corolla",
         "reasons": [
             {"trait": "reliable", "contribution": 0.2},
             {"type": "missing_trait", "trait": "awd", "message": "Limited"},
-        ]
+        ],
     }
     assert format_recommended_because(recommendation) == "reliable"
+
+
+def test_format_recommended_because_never_uses_circular_fallback():
+    recommendation = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "reasons": [],
+        "selected_year_range": {"start_year": 2014, "end_year": 2019},
+    }
+    text = format_recommended_because(recommendation)
+    assert "matches your buyer profile" not in text.casefold()
+    assert len(text) > 10
+
+
+def test_format_recommended_because_prefers_recommendation_notes():
+    recommendation = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "notes": "Budget-friendly commuter with low ownership costs.",
+        "reasons": [{"trait": "reliable", "contribution": 0.2}],
+    }
+    assert (
+        format_recommended_because(recommendation)
+        == "Budget-friendly commuter with low ownership costs."
+    )
+
+
+def test_resolve_listing_display_name_uses_title_not_internal_id():
+    entry = {
+        "listing_name": "adv_parser_price_drop_corolla",
+        "listing": {
+            "year": 2016,
+            "make": "Toyota",
+            "model": "Corolla",
+            "raw_title": "PRICE DROP 2022!!! 2016 Toyota Corolla LE",
+        },
+    }
+    assert (
+        resolve_listing_display_name(entry)
+        == "PRICE DROP 2022!!! 2016 Toyota Corolla LE"
+    )
+
+
+def test_resolve_listing_display_name_prefers_display_name_field():
+    entry = {
+        "listing_name": "adv_test",
+        "display_name": "2016 Toyota Corolla LE — demo card",
+        "listing": {"year": 2016, "make": "Toyota", "model": "Corolla"},
+    }
+    assert resolve_listing_display_name(entry) == "2016 Toyota Corolla LE — demo card"
+
+
+def test_detect_seller_title_conflict():
+    raw = {
+        "title": "2016 Toyota Corolla SE clean title",
+        "description": "salvage title rebuilt — runs great",
+    }
+    assert detect_seller_title_conflict(raw, {"clean_title": False}) is True
+
+
+def test_build_watchouts_includes_seller_conflict():
+    entry = _strong_entry()
+    raw = {
+        "title": "2016 Toyota Corolla SE clean title",
+        "description": "salvage title rebuilt",
+    }
+    watchouts = build_watchouts(entry["fit"], entry["listing"], raw_listing=raw)
+    assert SELLER_TITLE_CONFLICT_WARNING in watchouts
 
 
 def test_build_watchouts_includes_missing_price():
@@ -108,6 +194,10 @@ def test_build_watchouts_combines_warnings_and_negatives_without_dupes():
 
     assert len(watchouts) == 1
     assert "Dirty title" in watchouts[0] or "clean title" in watchouts[0].casefold()
+
+
+def test_dirty_title_banner_constant_is_prominent_copy():
+    assert "verify title status" in DIRTY_TITLE_BANNER.casefold()
 
 
 def test_listing_source_url_requires_http_scheme():

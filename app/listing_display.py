@@ -33,7 +33,14 @@ _MAJOR_WARNING_MARKERS = (
 )
 
 WATCHOUT_MISSING_PRICE = "Price not listed — cannot verify budget fit"
-WATCHOUT_MISSING_MILEAGE = "Mileage not listed — cannot verify usage/risk"
+WATCHOUT_MISSING_MILEAGE = "Mileage not listed — cannot verify wear/usage"
+DIRTY_TITLE_BANNER = (
+    "Dirty or branded title reported — verify title status before purchase."
+)
+SELLER_TITLE_CONFLICT_WARNING = (
+    "Seller's title/description conflict — verify title status independently "
+    "before purchase."
+)
 
 _WATCHOUT_DEDUPE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
@@ -73,6 +80,13 @@ _WATCHOUT_DEDUPE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
+        "seller_title_conflict",
+        (
+            "title/description conflict",
+            "verify title status independently",
+        ),
+    ),
+    (
         "awd_requirement",
         (
             "does not meet awd",
@@ -87,14 +101,56 @@ _WATCHOUT_DEDUPE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 RANKING_ORDER_LINES: tuple[str, ...] = (
     "Listings are ordered by fit label (Strong fit, then Moderate, then Weak).",
-    "When fit is similar, higher confidence (High, then Medium, then Low) ranks higher.",
-    "Further tie-breakers: higher fit score, fewer warnings, lower price, then lower mileage.",
+    "When fit is similar, higher trust (High, then Medium, then Low) ranks higher.",
+    "Further tie-breakers: fewer warnings, lower price, then lower mileage.",
     "Price and mileage matter most as tie-breakers — not as the main reason a listing leads.",
 )
 
+_CONFIDENCE_FIELD_LABELS: dict[str, str] = {
+    "confidence_level": "Trust level",
+    "inferred_fields": "Fields inferred from listing text",
+    "missing_fields": "Missing core details",
+    "ambiguity_detected": "Unclear mileage in listing text",
+    "mileage_conflict_detected": "Mileage mismatch between text and fields",
+    "conflicting_signals": "Mixed positive and negative signals",
+}
 
-def format_recommended_because(recommendation: dict[str, Any]) -> str:
-    """Short trait-led summary for why a vehicle model was recommended."""
+
+def _find_vehicle_profile(make: str, model: str) -> dict[str, Any] | None:
+    from src.vehicles.vehicle_profile_loader import load_vehicle_profiles
+
+    make_key = make.strip().casefold()
+    model_key = model.strip().casefold()
+    for vehicle in load_vehicle_profiles()["vehicles"]:
+        if (
+            vehicle["make"].strip().casefold() == make_key
+            and vehicle["model"].strip().casefold() == model_key
+        ):
+            return vehicle
+    return None
+
+
+def _year_range_notes(
+    vehicle: dict[str, Any],
+    selected_year_range: dict[str, Any] | None,
+) -> str | None:
+    year_ranges = vehicle.get("year_ranges") or []
+    if not year_ranges:
+        return None
+    if selected_year_range:
+        for year_range in year_ranges:
+            if (
+                year_range.get("start_year") == selected_year_range.get("start_year")
+                and year_range.get("end_year") == selected_year_range.get("end_year")
+            ):
+                notes = year_range.get("notes")
+                if notes:
+                    return str(notes).strip()
+    notes = year_ranges[0].get("notes")
+    return str(notes).strip() if notes else None
+
+
+def _trait_summary(recommendation: dict[str, Any]) -> str | None:
     reasons = recommendation.get("reasons") or []
     traits: list[str] = []
     for item in reasons:
@@ -105,7 +161,35 @@ def format_recommended_because(recommendation: dict[str, Any]) -> str:
             traits.append(str(trait).replace("_", " "))
     if traits:
         return ", ".join(traits)
-    return "matches your buyer profile"
+    return None
+
+
+def format_recommended_because(recommendation: dict[str, Any]) -> str:
+    """Short summary for why a vehicle model was recommended (no circular fallback)."""
+    notes = recommendation.get("notes")
+    if notes and str(notes).strip():
+        return str(notes).strip()
+
+    trait_summary = _trait_summary(recommendation)
+    if trait_summary:
+        return trait_summary
+
+    vehicle = _find_vehicle_profile(
+        recommendation["make"],
+        recommendation["model"],
+    )
+    if vehicle:
+        profile_notes = _year_range_notes(
+            vehicle,
+            recommendation.get("selected_year_range"),
+        )
+        if profile_notes:
+            return profile_notes
+
+    return (
+        f"Strong match for {recommendation['make']} {recommendation['model']} "
+        f"based on your priorities."
+    )
 
 
 def format_price(price: int | float | None) -> str:
@@ -136,13 +220,92 @@ def format_title_status(listing: dict[str, Any]) -> str:
 
 
 def format_listing_facts(listing: dict[str, Any]) -> str:
-    return " · ".join(
-        (
-            format_price(listing.get("price")),
-            format_mileage(listing.get("mileage")),
-            format_title_status(listing),
-        )
+    """Compact facts row; missing price/mileage and dirty title are surfaced elsewhere."""
+    parts: list[str] = []
+    price = listing.get("price")
+    if price is not None:
+        parts.append(f"${int(price):,}")
+    mileage = listing.get("mileage")
+    if mileage is not None:
+        parts.append(format_mileage(mileage))
+    clean = listing.get("clean_title")
+    if clean is True:
+        parts.append("Clean title")
+    elif clean is None:
+        parts.append("Title undisclosed")
+    return " · ".join(parts) if parts else "Details incomplete — see watchouts below"
+
+
+def listing_has_missing_price(listing: dict[str, Any]) -> bool:
+    return listing.get("price") is None
+
+
+def listing_has_missing_mileage(listing: dict[str, Any]) -> bool:
+    return listing.get("mileage") is None
+
+
+def _looks_like_internal_listing_id(name: str) -> bool:
+    lowered = name.casefold()
+    return lowered.startswith(("adv_", "messy_", "good_", "sparse_", "budget_"))
+
+
+def resolve_listing_display_name(
+    entry: dict[str, Any],
+    raw_listing: dict[str, Any] | None = None,
+) -> str:
+    """Buyer-facing listing label; never prefer internal demo IDs."""
+    display_name = entry.get("display_name")
+    if display_name and str(display_name).strip():
+        return str(display_name).strip()
+
+    listing = entry.get("listing") or {}
+    for source in (listing, raw_listing or {}):
+        for key in ("raw_title", "title"):
+            value = source.get(key)
+            if value and str(value).strip():
+                return str(value).strip()
+
+    parts = [
+        str(listing["year"]),
+        listing["make"],
+        listing["model"],
+    ]
+    trim = listing.get("trim")
+    if trim:
+        parts.append(str(trim))
+    ymmt = " ".join(parts)
+
+    listing_name = str(entry.get("listing_name", "")).strip()
+    if listing_name and not _looks_like_internal_listing_id(listing_name):
+        return listing_name
+    return ymmt
+
+
+def detect_seller_title_conflict(
+    raw_listing: dict[str, Any] | None,
+    listing: dict[str, Any],
+) -> bool:
+    """True when title and description disagree on clean vs branded title."""
+    if raw_listing is None:
+        return False
+
+    from src.listings.listing_normalizer import _resolved_title, detect_clean_title
+
+    title = _resolved_title(raw_listing)
+    description = raw_listing.get("description")
+    description_text = (
+        str(description).strip()
+        if description is not None and str(description).strip()
+        else None
     )
+    if not title or not description_text:
+        return False
+
+    title_status = detect_clean_title(title, None)
+    description_status = detect_clean_title(None, description_text)
+    if title_status is None or description_status is None:
+        return False
+    return title_status != description_status
 
 
 def _normalize_watchout_key(text: str) -> str:
@@ -189,9 +352,17 @@ def _dedupe_watchouts(items: list[str]) -> list[str]:
     return deduped
 
 
-def build_watchouts(fit: dict[str, Any], listing: dict[str, Any]) -> list[str]:
+def build_watchouts(
+    fit: dict[str, Any],
+    listing: dict[str, Any],
+    *,
+    raw_listing: dict[str, Any] | None = None,
+) -> list[str]:
     """Unified buyer-facing watchouts: warnings, negatives, and missing-field gaps."""
     candidates: list[str] = []
+
+    if detect_seller_title_conflict(raw_listing, listing):
+        candidates.append(SELLER_TITLE_CONFLICT_WARNING)
 
     if listing.get("price") is None:
         candidates.append(WATCHOUT_MISSING_PRICE)
@@ -260,8 +431,19 @@ def top_pick_banner_text(entry: dict[str, Any] | None) -> str:
     return "No clear top pick — review warnings."
 
 
-def format_score_caption(fit: dict[str, Any]) -> str:
-    return f"Fit score {fit.get('fit_score', 0.0):.3f} (secondary signal)"
+def format_confidence_breakdown(confidence: dict[str, Any]) -> list[tuple[str, str]]:
+    """Buyer-friendly confidence lines for the scoring breakdown expander."""
+    lines: list[tuple[str, str]] = []
+    for key, value in confidence.items():
+        label = _CONFIDENCE_FIELD_LABELS.get(key, key.replace("_", " ").title())
+        if isinstance(value, bool):
+            text = "Yes" if value else "No"
+        elif isinstance(value, list):
+            text = ", ".join(str(item) for item in value) if value else "None"
+        else:
+            text = str(value)
+        lines.append((label, text))
+    return lines
 
 
 def build_ranking_explanation_lines() -> list[str]:
