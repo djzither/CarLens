@@ -605,6 +605,25 @@ def has_dirty_title(listing: dict[str, Any]) -> bool:
     return listing.get("clean_title") is False
 
 
+def confidence_level_from_entry(
+    fit: dict[str, Any],
+    confidence: dict[str, Any] | None = None,
+) -> str:
+    conf = confidence or fit.get("confidence") or {}
+    return str(conf.get("confidence_level", fit.get("confidence_level", "Low")))
+
+
+def shows_strong_fit_low_confidence_warning(
+    fit: dict[str, Any],
+    confidence: dict[str, Any] | None = None,
+) -> bool:
+    """True when fit is strong but trust/data confidence is low."""
+    return (
+        fit.get("fit_label") == "Strong fit"
+        and confidence_level_from_entry(fit, confidence) == "Low"
+    )
+
+
 def warning_is_major(warning: str) -> bool:
     lowered = warning.casefold()
     return any(marker.casefold() in lowered for marker in _MAJOR_WARNING_MARKERS)
