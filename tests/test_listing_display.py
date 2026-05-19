@@ -3,21 +3,32 @@ from __future__ import annotations
 from app.listing_display import (
     DIRTY_TITLE_BANNER,
     SELLER_TITLE_CONFLICT_WARNING,
+    SUMMARY_BADGE_BUDGET,
+    SUMMARY_BADGE_CAUTION,
+    SUMMARY_BADGE_TOP_PICK,
     WATCHOUT_MISSING_MILEAGE,
     WATCHOUT_MISSING_PRICE,
     build_watchouts,
+    budget_option_listing_names,
     detect_seller_title_conflict,
+    format_compact_listing_header,
+    format_listing_card_tagline,
     format_listing_facts,
     format_listing_source_markdown,
     format_mileage,
+    format_positive_reason_display,
+    format_positive_reasons_for_display,
     format_recommended_because,
+    format_summary_badge_line,
     has_major_warnings,
     listing_source_url,
     qualifies_as_top_pick,
     resolve_listing_display_name,
+    resolve_listing_summary_badge,
     top_pick_banner_text,
     warning_is_major,
 )
+from src.listings.listing_reasons import STRONG_MODEL_MATCH
 from src.listings.listing_fit import (
     DIRTY_TITLE_WARNING,
     MISSING_MILEAGE_WARNING,
@@ -239,3 +250,86 @@ def test_top_pick_banner_when_not_qualified():
 def test_has_major_warnings_for_budget_exceed():
     fit = {"warnings": ["Price $20,000 exceeds your $10,000 budget"]}
     assert has_major_warnings(fit) is True
+
+
+def test_format_positive_reason_display_humanizes_strong_model_match():
+    listing = {"year": 2016, "make": "Toyota", "model": "Corolla", "price": 9_500}
+    text = format_positive_reason_display(
+        STRONG_MODEL_MATCH,
+        make="Toyota",
+        model="Corolla",
+        listing=listing,
+    )
+    assert "Toyota Corolla" in text
+    assert "strong match" in text.casefold()
+    assert STRONG_MODEL_MATCH not in text
+
+
+def test_format_positive_reasons_for_display_includes_rationale():
+    entry = _strong_entry()
+    listing = entry["listing"]
+    lines = format_positive_reasons_for_display(
+        ["Under budget", STRONG_MODEL_MATCH],
+        make="Toyota",
+        model="Corolla",
+        listing=listing,
+        fit=entry["fit"],
+    )
+    assert len(lines) >= 2
+    assert any("budget" in line.casefold() for line in lines)
+    assert not any(line == STRONG_MODEL_MATCH for line in lines)
+    assert not any(line == "Under budget" for line in lines)
+
+
+def test_resolve_summary_badge_top_pick_for_rank_one_strong_entry():
+    entry = _strong_entry()
+    badge = resolve_listing_summary_badge(entry, rank=1)
+    assert badge == SUMMARY_BADGE_TOP_PICK
+    assert "TOP PICK" in format_summary_badge_line(badge)
+
+
+def test_resolve_summary_badge_caution_for_dirty_title():
+    entry = _strong_entry(clean_title=False)
+    entry["listing"]["clean_title"] = False
+    entry["fit"]["warnings"] = []
+    badge = resolve_listing_summary_badge(entry, rank=2)
+    assert badge == SUMMARY_BADGE_CAUTION
+
+
+def test_budget_option_listing_names_picks_lowest_strong_under_budget():
+    low = _strong_entry()
+    low["listing_name"] = "low"
+    low["listing"]["price"] = 8_000
+    high = _strong_entry()
+    high["listing_name"] = "high"
+    high["listing"]["price"] = 11_000
+    names = budget_option_listing_names([low, high])
+    assert names == {"low"}
+
+
+def test_resolve_summary_badge_budget_option_when_flagged():
+    entry = _strong_entry()
+    entry["listing_name"] = "budget"
+    badge = resolve_listing_summary_badge(
+        entry,
+        rank=2,
+        is_budget_option=True,
+    )
+    assert badge == SUMMARY_BADGE_BUDGET
+
+
+def test_format_compact_listing_header_matches_expected_shape():
+    entry = _strong_entry()
+    title_line, stats_line = format_compact_listing_header(entry, rank=1)
+    assert title_line.startswith("#1 ")
+    assert "Toyota" in title_line
+    assert "% fit" in stats_line
+    assert "trust" in stats_line.casefold()
+    assert "$" in stats_line
+
+
+def test_format_listing_card_tagline_for_top_pick():
+    entry = _strong_entry()
+    tagline = format_listing_card_tagline(entry, rank=1)
+    assert "top overall" in tagline.casefold()
+    assert len(tagline) > 20

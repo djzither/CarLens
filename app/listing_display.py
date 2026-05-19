@@ -12,6 +12,7 @@ from src.listings.listing_fit import (
     MISSING_TITLE_WARNING,
     NOT_AWD_WARNING,
 )
+from src.listings.listing_reasons import STRONG_MODEL_MATCH
 
 _MAJOR_WARNING_MARKERS = (
     "does not have a clean title",
@@ -106,6 +107,19 @@ RANKING_ORDER_LINES: tuple[str, ...] = (
     "Price and mileage matter most as tie-breakers — not as the main reason a listing leads.",
 )
 
+SUMMARY_BADGE_TOP_PICK: tuple[str, str] = (
+    "🏆 TOP PICK",
+    "Best overall value and reliability",
+)
+SUMMARY_BADGE_CAUTION: tuple[str, str] = (
+    "⚠️ CAUTION",
+    "Verify title before purchase",
+)
+SUMMARY_BADGE_BUDGET: tuple[str, str] = (
+    "💰 BUDGET OPTION",
+    "Lowest-cost strong match",
+)
+
 _CONFIDENCE_FIELD_LABELS: dict[str, str] = {
     "confidence_level": "Trust level",
     "inferred_fields": "Fields inferred from listing text",
@@ -174,9 +188,14 @@ def format_recommended_because(recommendation: dict[str, Any]) -> str:
     if trait_summary:
         return trait_summary
 
+    make = recommendation.get("make")
+    model = recommendation.get("model")
+    if not make or not model:
+        return "See listing fit and trust details below."
+
     vehicle = _find_vehicle_profile(
-        recommendation["make"],
-        recommendation["model"],
+        make,
+        model,
     )
     if vehicle:
         profile_notes = _year_range_notes(
@@ -187,9 +206,105 @@ def format_recommended_because(recommendation: dict[str, Any]) -> str:
             return profile_notes
 
     return (
-        f"Strong match for {recommendation['make']} {recommendation['model']} "
+        f"Strong match for {make} {model} "
         f"based on your priorities."
     )
+
+
+def _top_trait_phrase(make: str, model: str) -> str:
+    vehicle = _find_vehicle_profile(make, model)
+    if not vehicle:
+        return "solid value"
+    trait_names: list[str] = []
+    for trait in vehicle.get("traits") or []:
+        name = str(trait.get("name", "")).replace("_", " ").strip()
+        if name:
+            trait_names.append(name)
+        if len(trait_names) >= 2:
+            break
+    if not trait_names:
+        return "solid value"
+    if len(trait_names) == 1:
+        return trait_names[0]
+    return f"{trait_names[0]} and {trait_names[1]}"
+
+
+def format_positive_reason_display(
+    reason: str,
+    *,
+    make: str,
+    model: str,
+    listing: dict[str, Any],
+) -> str:
+    """Human-readable positive reason; upstream signal strings stay unchanged."""
+    if reason == STRONG_MODEL_MATCH:
+        traits = _top_trait_phrase(make, model)
+        return (
+            f"{make} {model} is a strong match because it is known for "
+            f"{traits} and typically fits this budget range."
+        )
+    if reason == "Within recommended year range":
+        year = listing.get("year")
+        if year is not None:
+            return (
+                f"Model year {year} falls within the recommended years for "
+                f"this {make} {model}."
+            )
+        return (
+            f"Model year is within the recommended range for this "
+            f"{make} {model}."
+        )
+    if reason == "Under budget":
+        price = listing.get("price")
+        if price is not None:
+            return (
+                f"Listed at {format_price(price)}, which comfortably fits "
+                f"your budget."
+            )
+        return "Price comfortably fits your budget."
+    if reason == "Mileage within preferred range":
+        mileage = listing.get("mileage")
+        if mileage is not None and listing.get("price") is not None:
+            return (
+                "This listing is especially attractive because mileage is low "
+                f"({format_compact_mileage(mileage)}) and price "
+                f"({format_compact_price(listing['price'])}) comfortably "
+                f"fit your budget."
+            )
+        return (
+            "This listing is especially attractive because mileage is low "
+            "and price comfortably fits your budget."
+        )
+    if reason == "Matches requested AWD":
+        return "Meets your all-wheel drive requirement."
+    return reason
+
+
+def format_positive_reasons_for_display(
+    positives: list[str],
+    *,
+    make: str,
+    model: str,
+    listing: dict[str, Any],
+    fit: dict[str, Any] | None = None,
+) -> list[str]:
+    lines = [
+        format_positive_reason_display(
+            reason,
+            make=make,
+            model=model,
+            listing=listing,
+        )
+        for reason in positives
+    ]
+    if (
+        listing.get("clean_title") is True
+        and fit is not None
+        and not has_major_warnings(fit)
+        and not any("title" in line.casefold() for line in lines)
+    ):
+        lines.append("Clean title with no major risks detected.")
+    return lines
 
 
 def format_price(price: int | float | None) -> str:
@@ -208,6 +323,35 @@ def format_mileage(mileage: int | float | None) -> str:
             return f"{int(thousands)}k miles"
         return f"{thousands:.1f}k miles"
     return f"{miles:,} miles"
+
+
+def format_compact_price(price: int | float | None) -> str:
+    if price is None:
+        return "Price N/A"
+    amount = int(price)
+    if amount >= 1_000:
+        thousands = amount / 1_000
+        if amount % 1_000 == 0:
+            return f"${int(thousands)}k"
+        return f"${thousands:.1f}k"
+    return f"${amount:,}"
+
+
+def format_compact_mileage(mileage: int | float | None) -> str:
+    if mileage is None:
+        return "mi N/A"
+    miles = int(mileage)
+    if miles >= 1_000:
+        thousands = miles / 1_000
+        if miles % 1_000 == 0:
+            return f"{int(thousands)}k mi"
+        return f"{thousands:.1f}k mi"
+    return f"{miles:,} mi"
+
+
+def format_fit_percent(fit: dict[str, Any]) -> str:
+    score = float(fit.get("fit_score", 0.0))
+    return f"{int(round(score * 100))}% fit"
 
 
 def format_title_status(listing: dict[str, Any]) -> str:
@@ -429,6 +573,132 @@ def top_pick_banner_text(entry: dict[str, Any] | None) -> str:
     if entry is not None and qualifies_as_top_pick(entry):
         return "Top pick"
     return "No clear top pick — review warnings."
+
+
+def listing_needs_caution_badge(
+    entry: dict[str, Any],
+    *,
+    watchouts: list[str] | None = None,
+) -> bool:
+    listing = entry["listing"]
+    fit = entry["fit"]
+    if listing.get("clean_title") is False:
+        return True
+    if has_major_warnings(fit):
+        return True
+    if watchouts is None:
+        watchouts = build_watchouts(
+            fit,
+            listing,
+            raw_listing=entry.get("raw_listing"),
+        )
+    for item in watchouts:
+        lowered = item.casefold()
+        if "title" in lowered or "verify" in lowered:
+            return True
+    return False
+
+
+def resolve_listing_summary_badge(
+    entry: dict[str, Any],
+    *,
+    rank: int = 1,
+    is_budget_option: bool = False,
+) -> tuple[str, str] | None:
+    if rank == 1 and qualifies_as_top_pick(entry):
+        return SUMMARY_BADGE_TOP_PICK
+    if listing_needs_caution_badge(entry):
+        return SUMMARY_BADGE_CAUTION
+    if is_budget_option:
+        return SUMMARY_BADGE_BUDGET
+    return None
+
+
+def format_summary_badge_line(badge: tuple[str, str] | None) -> str | None:
+    if badge is None:
+        return None
+    label, subtitle = badge
+    return f"**{label}:** {subtitle}"
+
+
+def budget_option_listing_names(entries: list[dict[str, Any]]) -> set[str]:
+    """Listing names tied for lowest price among strong, under-budget listings."""
+    candidates: list[tuple[int, str]] = []
+    for entry in entries:
+        fit = entry["fit"]
+        listing = entry["listing"]
+        if fit.get("fit_label") != "Strong fit":
+            continue
+        price = listing.get("price")
+        if price is None:
+            continue
+        positives = fit.get("positive_reasons") or []
+        if "Under budget" not in positives:
+            continue
+        candidates.append((int(price), entry["listing_name"]))
+    if not candidates:
+        return set()
+    min_price = min(price for price, _ in candidates)
+    return {name for price, name in candidates if price == min_price}
+
+
+def format_compact_listing_header(
+    entry: dict[str, Any],
+    *,
+    rank: int,
+    raw_listing: dict[str, Any] | None = None,
+) -> tuple[str, str]:
+    listing = entry["listing"]
+    fit = entry["fit"]
+    confidence = entry.get("confidence") or fit.get("confidence") or {}
+    level = confidence.get("confidence_level", fit.get("confidence_level", "Low"))
+    display_label = resolve_listing_display_name(entry, raw_listing)
+    short_label = f"{listing['make']} {listing['model']}"
+    if short_label.casefold() not in display_label.casefold():
+        title_line = f"#{rank} {display_label}"
+    else:
+        title_line = f"#{rank} {short_label}"
+    stats = " | ".join(
+        [
+            format_fit_percent(fit),
+            f"{level} trust",
+            format_compact_price(listing.get("price")),
+            format_compact_mileage(listing.get("mileage")),
+        ]
+    )
+    return title_line, stats
+
+
+def format_listing_card_tagline(
+    entry: dict[str, Any],
+    *,
+    rank: int = 1,
+    is_budget_option: bool = False,
+) -> str:
+    listing = entry["listing"]
+    fit = entry["fit"]
+    make = str(listing["make"])
+    model = str(listing["model"])
+
+    if rank == 1 and qualifies_as_top_pick(entry):
+        trait = _top_trait_phrase(make, model)
+        return (
+            f"Top overall choice with strong {trait} and no red flags."
+        )
+    if listing_needs_caution_badge(entry):
+        return "Review title and listing details carefully before committing."
+    if is_budget_option:
+        return (
+            "Strong match at the lowest price among comparable listings "
+            "in this group."
+        )
+    if fit.get("fit_label") == "Strong fit":
+        return (
+            f"Solid {make} {model} option that aligns with your priorities."
+        )
+    if fit.get("fit_label") == "Moderate fit":
+        return "Acceptable match — weigh watchouts against price and mileage."
+    return "Weaker match for this recommendation — compare alternatives first."
 
 
 def format_confidence_breakdown(confidence: dict[str, Any]) -> list[tuple[str, str]]:

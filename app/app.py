@@ -14,20 +14,25 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
-from listing_display import (
+from app.listing_display import (
     DIRTY_TITLE_BANNER,
     WATCHOUT_MISSING_MILEAGE,
     WATCHOUT_MISSING_PRICE,
+    budget_option_listing_names,
     build_ranking_explanation_lines,
     build_watchouts,
+    format_compact_listing_header,
     format_confidence_breakdown,
-    format_listing_facts,
+    format_listing_card_tagline,
     format_listing_source_markdown,
+    format_positive_reasons_for_display,
     format_recommended_because,
+    format_summary_badge_line,
     listing_has_missing_mileage,
     listing_has_missing_price,
     qualifies_as_top_pick,
     resolve_listing_display_name,
+    resolve_listing_summary_badge,
     top_pick_banner_text,
 )
 from src.listings.listing_compare import (
@@ -49,7 +54,7 @@ from src.listings.listing_ranker import (
     rank_listings_for_recommendations,
 )
 from src.profiles.buyer_profile_loader import load_buyer_profiles
-from provider_mock_demo import (
+from app.provider_mock_demo import (
     PROVIDER_MOCK_BUYER_PROFILE_ID,
     PROVIDER_PIPELINE_STEPS,
     adapt_provider_payloads,
@@ -83,6 +88,27 @@ DEMO_LISTING_SETS: dict[str, dict[str, str]] = {
 
 ADVERSARIAL_DATASET_KEY = "adversarial"
 PROVIDER_MOCK_DATASET_KEY = "provider_mock"
+
+
+def available_listing_dataset_keys(
+    developer_mode: bool,
+    *,
+    demo_sets: dict[str, dict[str, str]] | None = None,
+) -> list[str]:
+    """Dataset keys shown in the sidebar; adversarial requires developer mode."""
+    sets = demo_sets if demo_sets is not None else DEMO_LISTING_SETS
+    return [
+        key
+        for key in sets
+        if developer_mode or key != ADVERSARIAL_DATASET_KEY
+    ]
+DEFAULT_BUYER_PROFILE_ID = "student"
+DEFAULT_LISTING_DATASET_KEY = "basic"
+AUTO_LOAD_SPINNER_MESSAGE = "Finding best student car matches..."
+AUTO_LOAD_STATUS_MESSAGE = (
+    "Loading a student example: $12k budget, reliable daily driver"
+)
+INTRO_CARD_DISMISSED_KEY = "intro_card_dismissed"
 ADVERSARIAL_DATASET_WARNING = (
     "Adversarial dataset: intentionally designed to stress-test trust and parsing"
 )
@@ -162,6 +188,120 @@ def run_pipeline(
     return {"recommendation_result": result, "ranked": ranked}
 
 
+def build_prefs_key(
+    selected_id: str,
+    listing_dataset: str,
+    budget_max: int,
+    max_mileage: int,
+    require_awd: bool,
+    developer_mode: bool,
+) -> tuple[Any, ...]:
+    return (
+        selected_id,
+        listing_dataset,
+        budget_max,
+        max_mileage,
+        require_awd,
+        developer_mode,
+    )
+
+
+def default_prefs_key(
+    profiles: list[dict[str, Any]],
+    *,
+    developer_mode: bool = False,
+) -> tuple[Any, ...]:
+    buyer = _find_buyer(profiles, DEFAULT_BUYER_PROFILE_ID)
+    return build_prefs_key(
+        DEFAULT_BUYER_PROFILE_ID,
+        DEFAULT_LISTING_DATASET_KEY,
+        int(buyer["budget_type"]["max_amount"]),
+        int(buyer["max_mileage"]),
+        "drive_type:awd" in buyer.get("hard_requirements", []),
+        developer_mode,
+    )
+
+
+def build_default_ranked_payload(
+    profiles: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Student profile + basic demo dataset — used for first-visit auto-load."""
+    if profiles is None:
+        profiles = load_buyer_profiles()["profiles"]
+    buyer = _find_buyer(profiles, DEFAULT_BUYER_PROFILE_ID)
+    buyer = apply_buyer_overrides(
+        buyer,
+        budget_max=int(buyer["budget_type"]["max_amount"]),
+        max_mileage=int(buyer["max_mileage"]),
+        require_awd="drive_type:awd" in buyer.get("hard_requirements", []),
+    )
+    loaded = load_sample_listings(DEFAULT_LISTING_DATASET_KEY)
+    listings = _listings_for_ranker(loaded)
+    return run_pipeline(DEFAULT_BUYER_PROFILE_ID, buyer, listings)
+
+
+def ensure_initial_ranked_payload(
+    session_state: dict[str, Any],
+    *,
+    payload: dict[str, Any],
+    prefs_key: tuple[Any, ...],
+    raw_lookup: dict[str, dict[str, Any]],
+    display_names: dict[str, str | None] | None,
+) -> bool:
+    """Populate session state on first visit. Returns True when auto-load ran."""
+    if "ranked_payload" in session_state:
+        return False
+    session_state["ranked_payload"] = payload
+    session_state["auto_loaded"] = True
+    session_state["prefs_key"] = prefs_key
+    session_state["compare_catalog"] = build_compare_catalog(
+        payload["ranked"],
+        raw_lookup,
+        display_names=display_names,
+    )
+    return True
+
+
+def should_show_intro_card(session_state: dict[str, Any]) -> bool:
+    return not session_state.get(INTRO_CARD_DISMISSED_KEY, False)
+
+
+def dismiss_intro_card(session_state: dict[str, Any]) -> None:
+    session_state[INTRO_CARD_DISMISSED_KEY] = True
+
+
+def has_displayable_ranked_content(payload: dict[str, Any]) -> bool:
+    ranked = payload.get("ranked") or {}
+    for group in ranked.get("groups") or []:
+        if group.get("listings"):
+            return True
+    if ranked.get("unmatched_listings"):
+        return True
+    return False
+
+
+def is_blank_ui_state(session_state: dict[str, Any]) -> bool:
+    payload = session_state.get("ranked_payload")
+    if payload is None:
+        return True
+    return not has_displayable_ranked_content(payload)
+
+
+def render_intro_card() -> None:
+    if not should_show_intro_card(st.session_state):
+        return
+    with st.container(border=True):
+        st.markdown("### CarLens helps you decide WHAT car to buy")
+        st.markdown("1. Understands buyer preferences")
+        st.markdown("2. Recommends vehicle models")
+        st.markdown("3. Ranks actual listings by fit + trust")
+        st.markdown("4. Explains why each car does or doesn’t work")
+        st.markdown("*Try changing budget or buyer profile in the sidebar.*")
+        if st.button("Dismiss", key="dismiss_intro_card"):
+            dismiss_intro_card(st.session_state)
+            st.rerun()
+
+
 def _enrich_entry(
     entry: dict[str, Any],
     raw_listings: dict[str, dict[str, Any]],
@@ -227,13 +367,12 @@ def render_listing_summary(
     rank: int,
     compare_id: str,
     selected_count: int,
+    is_budget_option: bool = False,
 ) -> None:
     """Always-visible listing summary; scoring details live in an expander."""
     listing = entry["listing"]
     raw_listing = entry.get("raw_listing")
     fit = entry["fit"]
-    confidence = entry["confidence"]
-    level = confidence["confidence_level"]
     display_label = resolve_listing_display_name(entry, raw_listing)
     checkbox_key = compare_checkbox_key(compare_id)
     is_selected = bool(st.session_state.get(checkbox_key))
@@ -246,13 +385,30 @@ def render_listing_summary(
     if listing_has_missing_mileage(listing):
         st.warning(WATCHOUT_MISSING_MILEAGE)
 
+    badge = resolve_listing_summary_badge(
+        entry,
+        rank=rank,
+        is_budget_option=is_budget_option,
+    )
+    badge_line = format_summary_badge_line(badge)
+    if badge_line:
+        st.markdown(badge_line)
+
+    title_line, stats_line = format_compact_listing_header(
+        entry,
+        rank=rank,
+        raw_listing=raw_listing,
+    )
     header_cols = st.columns([6, 1])
     with header_cols[0]:
-        st.markdown(
-            f"**{rank}. {display_label}** — "
-            f"<span style='color:{_CONFIDENCE_COLORS[level]}'>"
-            f"{level} trust</span>",
-            unsafe_allow_html=True,
+        st.markdown(f"**{title_line}**")
+        st.markdown(stats_line)
+        st.caption(
+            format_listing_card_tagline(
+                entry,
+                rank=rank,
+                is_budget_option=is_budget_option,
+            )
         )
         if listing.get("clean_title") is not False:
             st.markdown(
@@ -276,8 +432,6 @@ def render_listing_summary(
     if title_text and str(title_text).strip() and str(title_text).strip() != display_label:
         st.caption(str(title_text).strip())
 
-    st.markdown(format_listing_facts(listing))
-
     # TODO: Fetch listing images from marketplace sources when image pipeline exists.
     image_url = listing.get("image_url")
     if image_url:
@@ -292,8 +446,15 @@ def render_listing_summary(
 
     st.markdown("**Why it may fit**")
     positives = fit.get("positive_reasons") or []
-    if positives:
-        for reason in positives:
+    display_positives = format_positive_reasons_for_display(
+        positives,
+        make=str(listing["make"]),
+        model=str(listing["model"]),
+        listing=listing,
+        fit=fit,
+    )
+    if display_positives:
+        for reason in display_positives:
             st.markdown(f"- {reason}")
     else:
         st.markdown("- None")
@@ -370,6 +531,7 @@ def render_vehicle_section(
     for line in build_ranking_explanation_lines():
         st.markdown(f"- {line}")
 
+    budget_names = budget_option_listing_names(enriched_listings)
     for rank, entry in enumerate(enriched_listings, start=1):
         compare_id = make_compare_id(make, model, entry["listing_name"])
         with st.container(border=True):
@@ -378,6 +540,7 @@ def render_vehicle_section(
                 rank=rank,
                 compare_id=compare_id,
                 selected_count=selected_count,
+                is_budget_option=entry["listing_name"] in budget_names,
             )
 
 
@@ -467,33 +630,44 @@ def main() -> None:
     st.set_page_config(page_title="CarLens", page_icon="🚗", layout="wide")
     st.title("CarLens")
     st.caption("Personalized car decisions — ranked listings with explanations")
+    render_intro_card()
 
     buyer_data = load_buyer_profiles()
     profiles = buyer_data["profiles"]
     profile_labels = {profile["id"]: profile["label"] for profile in profiles}
     profile_ids = list(profile_labels.keys())
+    default_profile_index = (
+        profile_ids.index(DEFAULT_BUYER_PROFILE_ID)
+        if DEFAULT_BUYER_PROFILE_ID in profile_ids
+        else 0
+    )
 
     with st.sidebar:
-        st.header("Buyer preferences")
+        st.subheader("Buyer Profile")
         selected_id = st.selectbox(
-            "Buyer profile",
+            "Profile",
             profile_ids,
+            index=default_profile_index,
             format_func=lambda profile_id: profile_labels[profile_id],
+            label_visibility="collapsed",
         )
         base_buyer = _find_buyer(profiles, selected_id)
         default_budget = int(base_buyer["budget_type"]["max_amount"])
         default_mileage = int(base_buyer["max_mileage"])
         default_awd = "drive_type:awd" in base_buyer.get("hard_requirements", [])
 
+        st.subheader("Budget")
         budget_max = st.slider(
-            "Budget (max purchase)",
+            "Max purchase price",
             min_value=5_000,
             max_value=max(default_budget * 2, 30_000),
             value=default_budget,
             step=500,
         )
+
+        st.subheader("Preferences")
         max_mileage = st.slider(
-            "Mileage preference (max)",
+            "Max mileage",
             min_value=50_000,
             max_value=max(default_mileage + 50_000, 200_000),
             value=default_mileage,
@@ -501,22 +675,26 @@ def main() -> None:
         )
         require_awd = st.checkbox("Require AWD / 4WD", value=default_awd)
 
-        st.divider()
-        developer_mode = st.checkbox(
-            "Developer mode",
-            value=False,
-            help="Show adversarial stress-test dataset and demo pipeline stats.",
-        )
-        dataset_keys = [
-            key
-            for key in DEMO_LISTING_SETS
-            if developer_mode or key != ADVERSARIAL_DATASET_KEY
-        ]
-        listing_dataset = st.selectbox(
-            "Listing dataset",
-            dataset_keys,
-            format_func=lambda key: DEMO_LISTING_SETS[key]["label"],
-        )
+        with st.expander("Technical details", expanded=False):
+            developer_mode = st.checkbox(
+                "Developer mode",
+                value=False,
+                help=(
+                    "Show adversarial stress-test dataset and demo pipeline stats."
+                ),
+            )
+            dataset_keys = available_listing_dataset_keys(developer_mode)
+            default_dataset_index = (
+                dataset_keys.index(DEFAULT_LISTING_DATASET_KEY)
+                if DEFAULT_LISTING_DATASET_KEY in dataset_keys
+                else 0
+            )
+            listing_dataset = st.selectbox(
+                "Listing dataset",
+                dataset_keys,
+                index=default_dataset_index,
+                format_func=lambda key: DEMO_LISTING_SETS[key]["label"],
+            )
 
         st.divider()
         pipeline_clicked = st.button("Refresh recommendations", type="primary")
@@ -553,7 +731,7 @@ def main() -> None:
             item["id"]: item.get("display_name") for item in loaded_listings
         }
 
-    prefs_key = (
+    prefs_key = build_prefs_key(
         selected_id,
         listing_dataset,
         budget_max,
@@ -561,11 +739,27 @@ def main() -> None:
         require_awd,
         developer_mode,
     )
-    needs_refresh = (
-        pipeline_clicked
-        or st.session_state.get("prefs_key") != prefs_key
-        or "ranked_payload" not in st.session_state
-    )
+
+    if "ranked_payload" not in st.session_state:
+        st.info(AUTO_LOAD_STATUS_MESSAGE)
+        default_loaded = load_sample_listings(DEFAULT_LISTING_DATASET_KEY)
+        default_raw_lookup = {
+            item["id"]: item["listing"] for item in default_loaded
+        }
+        default_display_names = {
+            item["id"]: item.get("display_name") for item in default_loaded
+        }
+        with st.spinner(AUTO_LOAD_SPINNER_MESSAGE):
+            payload = build_default_ranked_payload(profiles)
+        ensure_initial_ranked_payload(
+            st.session_state,
+            payload=payload,
+            prefs_key=prefs_key,
+            raw_lookup=default_raw_lookup,
+            display_names=default_display_names,
+        )
+
+    needs_refresh = pipeline_clicked or st.session_state.get("prefs_key") != prefs_key
     if needs_refresh:
         with st.spinner("Running recommendation pipeline…"):
             if is_provider_mock:
@@ -659,4 +853,5 @@ def main() -> None:
             )
 
 
-main()
+if __name__ == "__main__":
+    main()
