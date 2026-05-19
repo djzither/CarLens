@@ -11,6 +11,7 @@ from src.listings.auto_dev_client import (
     AutoDevSearchParams,
     iter_auto_dev_provider_rows,
     parse_auto_dev_listings,
+    resolve_fixture_payload,
 )
 from src.listings.listing_source_adapter import AUTO_DEV_SOURCE, adapt_auto_dev_listing
 from src.listings.providers.raw_listing_provider import RawListingProvider, raw_listing_matches_id
@@ -75,8 +76,11 @@ class AutoDevProvider(RawListingProvider):
             self._payload = data
         return self._payload
 
+    def _resolved_fixture_payload(self) -> dict[str, Any]:
+        return resolve_fixture_payload(self.load_fixture_payload())
+
     def count_raw_listings(self) -> int:
-        return len(_iter_auto_dev_rows(self.load_fixture_payload()))
+        return len(_iter_auto_dev_rows(self._resolved_fixture_payload()))
 
     def _adapt_provider_rows(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
         return [
@@ -85,13 +89,13 @@ class AutoDevProvider(RawListingProvider):
         ]
 
     def _fixture_raw_listings(self) -> list[dict[str, Any]]:
-        return parse_auto_dev_listings(self.load_fixture_payload())
+        return parse_auto_dev_listings(self._resolved_fixture_payload())
 
     def _try_live_fetch(self, filters: SearchFilters) -> tuple[list[dict[str, Any]], list[str]]:
         if not self._use_live_api or not self._client.has_api_key:
             return [], []
 
-        result = self._client.search_listings(_filters_to_search_params(filters))
+        result = self._client.search_listings_paginated(_filters_to_search_params(filters))
         if result.errors:
             return [], result.errors
         if not result.payload:
@@ -119,7 +123,7 @@ class AutoDevProvider(RawListingProvider):
                 if rows:
                     return rows[0]
 
-        for row in _iter_auto_dev_rows(self.load_fixture_payload()):
+        for row in _iter_auto_dev_rows(self._resolved_fixture_payload()):
             raw = adapt_auto_dev_listing(row)
             if raw_listing_matches_id(raw, provider_listing_id):
                 return raw

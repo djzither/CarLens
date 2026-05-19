@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.listings.listing_normalizer import parse_mileage, parse_price
 from src.listings.provider_clean_title import apply_explicit_clean_title
 
 AUTO_DEV_SOURCE = "auto.dev"
@@ -147,13 +148,15 @@ def adapt_auto_dev_listing(provider_listing: dict[str, Any]) -> dict[str, Any]:
 
     price = retail.get("price")
     if price is not None:
-        raw["price"] = price
+        parsed_price = parse_price(price)
+        raw["price"] = parsed_price if parsed_price is not None else price
 
     mileage = retail.get("miles")
     if mileage is None:
         mileage = wholesale.get("miles")
     if mileage is not None:
-        raw["mileage"] = mileage
+        parsed_mileage = parse_mileage(mileage)
+        raw["mileage"] = parsed_mileage if parsed_mileage is not None else mileage
 
     title = _compose_title(
         year=vehicle.get("year"),

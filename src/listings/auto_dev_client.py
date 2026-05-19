@@ -259,12 +259,77 @@ class AutoDevClient:
         query = build_search_query_params(search_params)
         return self._fetch_json("", query)
 
+    def search_listings_paginated(
+        self,
+        params: AutoDevSearchParams | None = None,
+        *,
+        max_pages: int = 10,
+        **kwargs: Any,
+    ) -> AutoDevClientResult:
+        """Fetch and merge listing pages until `links.next` is absent (never raises)."""
+        search_params = params or search_params_from_filters(**kwargs)
+        start_page = search_params.page or 1
+        page_payloads: list[dict[str, Any]] = []
+        errors: list[str] = []
+
+        for offset in range(max_pages):
+            page = start_page + offset
+            page_params = AutoDevSearchParams(
+                make=search_params.make,
+                model=search_params.model,
+                price_max=search_params.price_max,
+                mileage_max=search_params.mileage_max,
+                year_min=search_params.year_min,
+                year_max=search_params.year_max,
+                page=page,
+                page_size=search_params.page_size,
+            )
+            result = self.search_listings(page_params)
+            if result.errors:
+                return AutoDevClientResult(payload={}, errors=result.errors)
+            if not result.payload:
+                break
+
+            page_payloads.append(result.payload)
+            links = result.payload.get("links")
+            has_next = isinstance(links, dict) and bool(links.get("next"))
+            if not has_next:
+                break
+
+        if not page_payloads:
+            return AutoDevClientResult(payload={}, errors=errors)
+        return AutoDevClientResult(payload=merge_auto_dev_page_payloads(page_payloads))
+
     def get_listing_by_vin(self, vin: str) -> AutoDevClientResult:
         """Fetch one listing by VIN; returns the raw API envelope (never raises)."""
         cleaned = vin.strip()
         if not cleaned:
             return AutoDevClientResult(payload={}, errors=["VIN is required"])
         return self._fetch_json(f"/{cleaned}", {})
+
+
+def merge_auto_dev_page_payloads(
+    pages: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Merge paginated Auto.dev responses in page order."""
+    merged_rows: list[dict[str, Any]] = []
+    links: dict[str, Any] = {}
+    for page_payload in pages:
+        if not isinstance(page_payload, dict):
+            continue
+        merged_rows.extend(iter_auto_dev_provider_rows(page_payload))
+        page_links = page_payload.get("links")
+        if isinstance(page_links, dict):
+            links = page_links
+    return {"data": merged_rows, "links": links}
+
+
+def resolve_fixture_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return a single listings envelope from a fixture (supports `pages`)."""
+    pages = payload.get("pages")
+    if isinstance(pages, list) and pages:
+        return merge_auto_dev_page_payloads(pages)
+    return payload
 
 
 def iter_auto_dev_provider_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
