@@ -89,6 +89,8 @@ class InventorySearchDiagnostics:
     listing_count: int = 0
     early_stop_triggered: bool = False
     top_model_count_capped: bool = False
+    fallback_raw_count: int | None = None
+    fallback_filtered_count: int | None = None
     warnings: list[str] = field(default_factory=list)
     metrics: RetrievalMetrics = field(default_factory=RetrievalMetrics)
 
@@ -99,6 +101,8 @@ class InventorySearchDiagnostics:
             "provider_queries": self.provider_searches,
             "listings_per_query": self.listings_per_query,
             "fallback_triggered": self.fallback_triggered,
+            "fallback_raw_count": self.fallback_raw_count,
+            "fallback_filtered_count": self.fallback_filtered_count,
             "fallback_search": self.fallback_search,
             "expanded_fallback_triggered": self.expanded_fallback_triggered,
             "aggregator_duplicates_removed": self.aggregator_duplicates_removed,
@@ -219,12 +223,19 @@ def format_diagnostics_report(diagnostics: InventorySearchDiagnostics) -> str:
         f"Provider queries: {len(diagnostics.provider_searches)}",
         *format_listings_per_query_lines(diagnostics.listings_per_query),
         f"Fallback triggered: {'yes' if diagnostics.fallback_triggered else 'no'}",
+    ]
+    if diagnostics.fallback_triggered:
+        lines.append(
+            f"Fallback listings: raw={diagnostics.fallback_raw_count} "
+            f"filtered={diagnostics.fallback_filtered_count}"
+        )
+    lines.extend([
         f"API calls: {api_calls}",
         f"Cache hits: {metrics.cache_hits} "
         f"(hit rate {metrics.cache_hit_rate:.0%})",
         f"Duplicates removed: {diagnostics.duplicates_removed}",
         f"Retrieval efficiency: {metrics.retrieval_efficiency:.2f}",
-    ]
+    ])
     if diagnostics.warnings:
         lines.append(f"Warnings: {'; '.join(diagnostics.warnings)}")
     return "\n".join(lines)
@@ -241,6 +252,46 @@ def _find_buyer(profiles: list[dict[str, Any]], buyer_profile_id: str) -> dict[s
         if profile["id"] == buyer_profile_id:
             return profile
     raise ValueError(f"buyer profile not found: {buyer_profile_id}")
+
+
+def recommended_model_keys(
+    recommendations: list[dict[str, Any]],
+) -> set[tuple[str, str]]:
+    """Case-insensitive make/model pairs for all recommended vehicles."""
+    return {
+        (str(item["make"]).casefold(), str(item["model"]).casefold())
+        for item in recommendations
+    }
+
+
+def _listing_make_model_key(record: dict[str, Any]) -> tuple[str, str] | None:
+    listing = record.get("listing")
+    if not isinstance(listing, dict):
+        return None
+    make = listing.get("make")
+    model = listing.get("model")
+    if make is None or model is None:
+        return None
+    return str(make).casefold(), str(model).casefold()
+
+
+def filter_fallback_to_recommended_models(
+    fallback_result: SearchResult,
+    recommended_models: set[tuple[str, str]],
+) -> SearchResult:
+    """Keep only budget-fallback listings that match a recommended make/model."""
+    filtered_listings = [
+        record
+        for record in fallback_result.listings
+        if (key := _listing_make_model_key(record)) is not None and key in recommended_models
+    ]
+    return SearchResult(
+        listings=filtered_listings,
+        provider_name=fallback_result.provider_name,
+        provider_warnings=fallback_result.provider_warnings,
+        errors=fallback_result.errors,
+        total_available=fallback_result.total_available,
+    )
 
 
 def buyer_budget_filters(buyer: dict[str, Any]) -> SearchFilters:
@@ -587,6 +638,7 @@ def retrieve_inventory_for_buyer(
 
     if collected_count < fallback_min_listings:
         fallback_filters = buyer_budget_filters(buyer)
+        all_recommended_models = recommended_model_keys(recommendations)
         diagnostics.fallback_triggered = True
         diagnostics.fallback_search = search_filters_summary(fallback_filters)
         query_summary = {
@@ -598,12 +650,20 @@ def retrieve_inventory_for_buyer(
             fallback_filters,
             retrieval_source=RETRIEVAL_SOURCE_BUDGET_FALLBACK,
         )
+        diagnostics.fallback_raw_count = len(fallback_result.listings)
+        fallback_result = filter_fallback_to_recommended_models(
+            fallback_result,
+            all_recommended_models,
+        )
+        diagnostics.fallback_filtered_count = len(fallback_result.listings)
         per_query_results.append(fallback_result)
         diagnostics.listings_per_query.append(
             {
                 **query_summary,
-                "count": len(fallback_result.listings),
+                "count": diagnostics.fallback_filtered_count,
                 "fallback": True,
+                "fallback_raw_count": diagnostics.fallback_raw_count,
+                "fallback_filtered_count": diagnostics.fallback_filtered_count,
             }
         )
         merged, aggregator_dupes = merge_search_results(per_query_results)

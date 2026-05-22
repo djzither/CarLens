@@ -32,7 +32,10 @@ from src.listings.recommendation_inventory import (
     format_pre_retrieval_diagnostics,
     format_provider_query_line,
     merge_search_results,
+    provider_records_to_scenarios,
+    recommended_model_keys,
     retrieve_inventory_for_buyer,
+    tag_search_listings,
 )
 from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.recommendation_engine import recommend
@@ -359,6 +362,120 @@ def test_early_stop_skips_remaining_model_queries() -> None:
 
     assert result["diagnostics"].early_stop_triggered is True
     assert len(provider.calls) == 1
+
+
+def _budget_fallback_mix() -> list[dict[str, Any]]:
+    return (
+        [
+            _provider_record(entry_id=f"sub-{index}", make="Subaru", model="XV")
+            for index in range(8)
+        ]
+        + [
+            _provider_record(entry_id=f"civ-{index}", make="Honda", model="Civic")
+            for index in range(2)
+        ]
+        + [_provider_record(entry_id="cor-b", make="Toyota", model="Corolla")]
+    )
+
+
+def _retrieve_with_budget_fallback_mix(*, top_model_count: int = 1) -> dict[str, Any]:
+    corolla = _provider_record(entry_id="c1", make="Toyota", model="Corolla")
+    sparse = _RecordingProvider(
+        {
+            ("Toyota", "Corolla"): [corolla],
+            (None, None): _budget_fallback_mix(),
+        }
+    )
+    service = ListingSearchService([sparse])
+    return retrieve_inventory_for_buyer(
+        "student",
+        service,
+        buyer=_student_buyer(),
+        top_model_count=top_model_count,
+    )
+
+
+def test_fallback_removes_non_recommended_models() -> None:
+    result = _retrieve_with_budget_fallback_mix()
+    diagnostics = result["diagnostics"]
+
+    assert diagnostics.fallback_triggered is True
+    pairs = {
+        (record["listing"]["make"], record["listing"]["model"])
+        for record in result["search_result"].listings
+    }
+    assert ("Subaru", "XV") not in pairs
+    allowed = {
+        (make, model)
+        for make, model in recommended_model_keys(recommend("student")["recommendations"])
+    }
+    assert all(
+        (str(make).casefold(), str(model).casefold()) in allowed
+        for make, model in pairs
+    )
+
+
+def test_fallback_preserves_recommended_models() -> None:
+    result = _retrieve_with_budget_fallback_mix()
+    diagnostics = result["diagnostics"]
+
+    pairs = {
+        (record["listing"]["make"], record["listing"]["model"])
+        for record in result["search_result"].listings
+    }
+    assert ("Honda", "Civic") in pairs
+    assert ("Toyota", "Corolla") in pairs
+    assert diagnostics.fallback_filtered_count == 3
+
+
+def test_fallback_diagnostics_show_raw_vs_filtered_count() -> None:
+    result = _retrieve_with_budget_fallback_mix()
+    diagnostics = result["diagnostics"]
+    diagnostics_dict = diagnostics.as_dict()
+
+    assert diagnostics.fallback_raw_count == 11
+    assert diagnostics.fallback_filtered_count == 3
+    assert diagnostics_dict["fallback_raw_count"] == 11
+    assert diagnostics_dict["fallback_filtered_count"] == 3
+    fallback_row = next(
+        row for row in diagnostics.listings_per_query if row.get("fallback")
+    )
+    assert fallback_row["fallback_raw_count"] == 11
+    assert fallback_row["fallback_filtered_count"] == 3
+    assert fallback_row["count"] == 3
+    report = format_diagnostics_report(diagnostics)
+    assert "Fallback listings: raw=11 filtered=3" in report
+
+
+def test_top_results_exclude_unrelated_weak_fit_fallback() -> None:
+    buyer = _student_buyer()
+    recommendations = recommend("student")["recommendations"]
+    corolla = _provider_record(entry_id="c1", make="Toyota", model="Corolla")
+    budget_mix = _budget_fallback_mix()
+
+    targeted = _retrieve_with_budget_fallback_mix()
+    unfiltered_budget = tag_search_listings(
+        SearchResult(listings=budget_mix, provider_name="recording"),
+        RETRIEVAL_SOURCE_BUDGET_FALLBACK,
+    )
+    merged, _ = merge_search_results(
+        [
+            SearchResult(listings=[corolla], provider_name="recording"),
+            unfiltered_budget,
+        ]
+    )
+    unfiltered_ranked = rank_listings_for_recommendations(
+        provider_records_to_scenarios(merged.listings),
+        recommendations,
+        buyer,
+    )
+
+    assert len(targeted["ranked"].get("unmatched_listings") or []) == 0
+    assert targeted["diagnostics"].weak_fit_count < count_weak_fits(unfiltered_ranked)
+    assert ("Subaru", "XV") not in {
+        (entry["listing"]["make"], entry["listing"]["model"])
+        for entry in targeted["ranked"].get("unmatched_listings") or []
+    }
 
 
 def test_fallback_tagging_on_listings() -> None:
