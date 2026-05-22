@@ -78,6 +78,7 @@ class InventorySearchDiagnostics:
     """Diagnostics for a recommendation-driven inventory pull."""
 
     recommended_models: list[dict[str, str]] = field(default_factory=list)
+    selected_model: str | None = None
     provider_searches: list[dict[str, Any]] = field(default_factory=list)
     listings_per_query: list[dict[str, Any]] = field(default_factory=list)
     fallback_triggered: bool = False
@@ -98,6 +99,7 @@ class InventorySearchDiagnostics:
     def as_dict(self) -> dict[str, Any]:
         return {
             "recommended_models": self.recommended_models,
+            "selected_model": self.selected_model,
             "provider_searches": self.provider_searches,
             "provider_queries": self.provider_searches,
             "listings_per_query": self.listings_per_query,
@@ -214,6 +216,8 @@ def format_post_retrieval_diagnostics(
         f"Fallback triggered: {'yes' if diagnostics.fallback_triggered else 'no'}"
     )
     lines.append(f"Unmatched model count: {unmatched_model_count}")
+    if diagnostics.selected_model:
+        lines.append(f"selected_model: {diagnostics.selected_model}")
     lines.extend(format_retrieval_plan_lines(diagnostics))
     return "\n".join(lines)
 
@@ -347,6 +351,70 @@ def filters_for_recommendation(
         max_price=int(max_price) if max_price is not None else None,
         max_mileage=int(max_mileage) if max_mileage is not None else None,
     )
+
+
+def filters_for_recommendation_widened_year(
+    recommendation: dict[str, Any],
+    buyer: dict[str, Any],
+) -> SearchFilters:
+    """Same make/model and budget as recommendation search, without year narrowing."""
+    budget = buyer.get("budget_type") or {}
+    max_price = budget.get("max_amount")
+    max_mileage = buyer.get("max_mileage")
+    return SearchFilters(
+        make=recommendation["make"],
+        model=recommendation["model"],
+        max_price=int(max_price) if max_price is not None else None,
+        max_mileage=int(max_mileage) if max_mileage is not None else None,
+    )
+
+
+def format_available_model_labels(
+    recommendations: list[dict[str, Any]],
+    *,
+    limit: int = 10,
+) -> str:
+    """Comma-separated Make Model labels for CLI error hints."""
+    labels = [
+        f"{item['make']} {item['model']}"
+        for item in recommendations[: max(limit, 1)]
+    ]
+    return ", ".join(labels)
+
+
+def recommendation_model_label(recommendation: dict[str, Any]) -> str:
+    return f"{recommendation['make']} {recommendation['model']}"
+
+
+def resolve_selected_recommendation(
+    recommendations: list[dict[str, Any]],
+    *,
+    selected_model: str | None = None,
+    selected_index: int | None = None,
+) -> dict[str, Any]:
+    """Resolve one recommendation by 1-based index or \"Make Model\" label."""
+    available = format_available_model_labels(recommendations)
+
+    if selected_index is not None:
+        if selected_index < 1 or selected_index > len(recommendations):
+            raise ValueError(
+                f"selected_index {selected_index} out of range (1-{len(recommendations)}). "
+                f"Valid options: {available}"
+            )
+        return recommendations[selected_index - 1]
+
+    if selected_model:
+        needle = selected_model.strip().casefold()
+        for item in recommendations:
+            label = f"{item['make']} {item['model']}".casefold()
+            if label == needle:
+                return item
+        raise ValueError(
+            f"selected model {selected_model!r} not found in recommendations. "
+            f"Valid options: {available}"
+        )
+
+    raise ValueError("provide selected_model or selected_index")
 
 
 def format_provider_query_line(
@@ -555,8 +623,10 @@ def _run_model_query(
     buyer: dict[str, Any],
     retrieval_source: str,
     per_query_results: list[SearchResult],
+    filters: SearchFilters | None = None,
 ) -> SearchResult:
-    filters = filters_for_recommendation(recommendation, buyer)
+    if filters is None:
+        filters = filters_for_recommendation(recommendation, buyer)
     query_summary = {
         **search_filters_summary(filters),
         "retrieval_source": retrieval_source,
@@ -733,6 +803,108 @@ def retrieve_inventory_for_buyer(
         "buyer_profile_id": buyer_profile_id,
         "buyer": buyer,
         "recommendation_result": recommendation_result,
+        "search_result": merged,
+        "ranked": ranked,
+        "diagnostics": diagnostics,
+    }
+
+
+def retrieve_inventory_for_selected_model(
+    buyer_profile_id: str,
+    search_service: Any,
+    *,
+    buyer: dict[str, Any] | None = None,
+    selected_recommendation: dict[str, Any],
+    recommendations: list[dict[str, Any]] | None = None,
+    fallback_min_listings: int = FALLBACK_MIN_LISTINGS,
+) -> dict[str, Any]:
+    """
+    Pull inventory for one recommended make/model (no generic budget fallback).
+
+    If the primary year-bounded search returns too few listings, retries with the
+    same make/model and buyer budget/mileage but without year constraints.
+    """
+    if buyer is None:
+        buyer_data = load_buyer_profiles()
+        buyer = _find_buyer(buyer_data["profiles"], buyer_profile_id)
+
+    recommendation_result = recommend(buyer_profile_id, buyer=buyer)
+    all_recommendations = recommendation_result["recommendations"]
+    if not all_recommendations:
+        raise ValueError(
+            f"no vehicle recommendations available for profile {buyer_profile_id!r}"
+        )
+    if recommendations is None:
+        recommendations = all_recommendations
+
+    session = _RetrievalSession(search_service)
+    diagnostics = InventorySearchDiagnostics(metrics=session.metrics)
+    diagnostics.selected_model = recommendation_model_label(selected_recommendation)
+    diagnostics.recommended_models = [
+        {
+            "make": selected_recommendation["make"],
+            "model": selected_recommendation["model"],
+        }
+    ]
+
+    per_query_results: list[SearchResult] = []
+    _run_model_query(
+        session,
+        diagnostics,
+        recommendation=selected_recommendation,
+        buyer=buyer,
+        retrieval_source=RETRIEVAL_SOURCE_RECOMMENDATION,
+        per_query_results=per_query_results,
+    )
+
+    merged, aggregator_dupes = merge_search_results(per_query_results)
+    diagnostics.aggregator_duplicates_removed = aggregator_dupes
+    collected_count = len(merged.listings)
+
+    if collected_count < fallback_min_listings:
+        diagnostics.expanded_fallback_triggered = True
+        widened_filters = filters_for_recommendation_widened_year(
+            selected_recommendation,
+            buyer,
+        )
+        query_summary = {
+            **search_filters_summary(widened_filters),
+            "retrieval_source": RETRIEVAL_SOURCE_EXPANDED,
+        }
+        diagnostics.provider_searches.append(query_summary)
+        widened_result = session.search(
+            widened_filters,
+            retrieval_source=RETRIEVAL_SOURCE_EXPANDED,
+        )
+        per_query_results.append(widened_result)
+        diagnostics.listings_per_query.append(
+            {**query_summary, "count": len(widened_result.listings)},
+        )
+        merged, aggregator_dupes = merge_search_results(per_query_results)
+        diagnostics.aggregator_duplicates_removed = aggregator_dupes
+        collected_count = len(merged.listings)
+
+    scenarios = provider_records_to_scenarios(merged.listings)
+    ranked = rank_listings_for_recommendations(
+        scenarios,
+        recommendations,
+        buyer,
+    )
+    pipeline = ranked.get("pipeline") or {}
+    diagnostics.duplicates_removed = max(
+        0,
+        int(pipeline.get("raw_count", len(scenarios)))
+        - int(pipeline.get("deduped_count", len(scenarios))),
+    )
+    diagnostics.weak_fit_count = count_weak_fits(ranked)
+    diagnostics.listing_count = len(merged.listings)
+    diagnostics.metrics.final_ranked = count_ranked_listings(ranked)
+
+    return {
+        "buyer_profile_id": buyer_profile_id,
+        "buyer": buyer,
+        "recommendation_result": recommendation_result,
+        "selected_recommendation": selected_recommendation,
         "search_result": merged,
         "ranked": ranked,
         "diagnostics": diagnostics,

@@ -34,7 +34,9 @@ from src.listings.recommendation_inventory import (
     merge_search_results,
     provider_records_to_scenarios,
     recommended_model_keys,
+    resolve_selected_recommendation,
     retrieve_inventory_for_buyer,
+    retrieve_inventory_for_selected_model,
     tag_search_listings,
 )
 from src.profiles.buyer_profile_loader import load_buyer_profiles
@@ -169,6 +171,103 @@ def test_post_retrieval_diagnostics_reports_fallback_and_counts() -> None:
     assert "Fallback triggered: yes" in report
     assert "budget_fallback" in report
     assert f"Unmatched model count: {unmatched}" in report
+
+
+def test_resolve_selected_recommendation_by_index_and_label() -> None:
+    recommendations = recommend("student")["recommendations"]
+    by_index = resolve_selected_recommendation(recommendations, selected_index=1)
+    by_label = resolve_selected_recommendation(
+        recommendations,
+        selected_model=f"{by_index['make']} {by_index['model']}",
+    )
+    assert by_index == by_label
+
+
+def test_selected_model_inventory_keeps_make_model_on_fallback() -> None:
+    recommendations = recommend("student")["recommendations"]
+    selected = resolve_selected_recommendation(recommendations, selected_index=2)
+
+    class _NarrowThenWideProvider(ListingProvider):
+        name = "recording"
+
+        def __init__(self) -> None:
+            self.calls: list[SearchFilters] = []
+
+        def search(self, filters: SearchFilters) -> SearchResult:
+            self.calls.append(filters)
+            assert filters.make == selected["make"]
+            assert filters.model == selected["model"]
+            if filters.min_year is not None:
+                return SearchResult(listings=[], provider_name=self.name)
+            return SearchResult(
+                listings=[
+                    _provider_record(
+                        entry_id="wide-1",
+                        make=selected["make"],
+                        model=selected["model"],
+                    )
+                ],
+                provider_name=self.name,
+            )
+
+        def get_by_id(self, listing_id: str) -> dict | None:
+            return None
+
+    provider = _NarrowThenWideProvider()
+    service = ListingSearchService([provider])
+    result = retrieve_inventory_for_selected_model(
+        "student",
+        service,
+        buyer=_student_buyer(),
+        selected_recommendation=selected,
+        recommendations=recommendations,
+        fallback_min_listings=1,
+    )
+    diagnostics = result["diagnostics"]
+
+    assert diagnostics.fallback_triggered is False
+    assert diagnostics.expanded_fallback_triggered is True
+    assert len(provider.calls) == 2
+    assert all(call.make == selected["make"] for call in provider.calls)
+    assert all(call.model == selected["model"] for call in provider.calls)
+    assert not any(call.make is None and call.model is None for call in provider.calls)
+
+
+def test_selected_model_inventory_does_not_use_budget_fallback() -> None:
+    recommendations = recommend("student")["recommendations"]
+    selected = resolve_selected_recommendation(recommendations, selected_index=1)
+    crosstrek = _provider_record(entry_id="sub-1", make="Subaru", model="XV")
+    corolla = _provider_record(entry_id="cor-1", make="Toyota", model="Corolla")
+
+    class _BudgetTrapProvider(ListingProvider):
+        name = "recording"
+
+        def __init__(self) -> None:
+            self.calls: list[SearchFilters] = []
+
+        def search(self, filters: SearchFilters) -> SearchResult:
+            self.calls.append(filters)
+            if filters.make and filters.model:
+                return SearchResult(listings=[], provider_name=self.name)
+            return SearchResult(listings=[crosstrek, corolla], provider_name=self.name)
+
+        def get_by_id(self, listing_id: str) -> dict | None:
+            return None
+
+    provider = _BudgetTrapProvider()
+    service = ListingSearchService([provider])
+    result = retrieve_inventory_for_selected_model(
+        "student",
+        service,
+        buyer=_student_buyer(),
+        selected_recommendation=selected,
+        recommendations=recommendations,
+        fallback_min_listings=5,
+    )
+
+    assert len(provider.calls) == 2
+    assert not any(call.make is None and call.model is None for call in provider.calls)
+    assert len(result["search_result"].listings) == 0
 
 
 def test_student_profile_creates_corolla_and_civic_searches() -> None:

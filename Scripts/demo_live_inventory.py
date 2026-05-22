@@ -28,19 +28,23 @@ from src.listings.listing_ranker import _listing_sort_key
 from src.listings.providers import AutoDevProvider, ListingSearchService
 from src.listings.recommendation_inventory import (
     FALLBACK_MIN_LISTINGS,
+    cap_top_model_count,
     format_diagnostics_report,
     format_post_retrieval_diagnostics,
     format_pre_retrieval_diagnostics,
+    resolve_selected_recommendation,
     retrieve_inventory_for_buyer,
+    retrieve_inventory_for_selected_model,
 )
 from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.recommendation_engine import recommend
 
 DEFAULT_BUYER_PROFILE_ID = "student"
 DEFAULT_TOP_N = 10
-# Student ranks Mazda3 fourth; default 4 queries Corolla, Civic, Camry, and Mazda3.
 DEFAULT_LIVE_TOP_MODEL_COUNT = 4
+DEFAULT_SHOW_RECOMMENDATIONS_COUNT = 5
 AUTO_DEV_PROVIDER_NAME = "auto.dev"
+MAX_REASON_LINES = 3
 
 
 def _find_buyer(profiles: list[dict[str, Any]], buyer_profile_id: str) -> dict[str, Any]:
@@ -48,6 +52,81 @@ def _find_buyer(profiles: list[dict[str, Any]], buyer_profile_id: str) -> dict[s
         if profile["id"] == buyer_profile_id:
             return profile
     raise ValueError(f"buyer profile not found: {buyer_profile_id}")
+
+
+def _format_reason_line(reason: dict[str, Any]) -> str:
+    return str(reason.get("message", reason))
+
+
+def _format_year_range_lines(selected: dict[str, Any] | None) -> list[str]:
+    if not selected:
+        return []
+    lines = [
+        f"Year range: {selected['start_year']}\u2013{selected['end_year']}",
+    ]
+    known_bad_years = selected.get("known_bad_years")
+    if known_bad_years:
+        years = ", ".join(str(year) for year in sorted(known_bad_years))
+        lines.append(f"Watch out for years: {years}")
+    return lines
+
+
+def format_recommendation_entry(rank: int, item: dict[str, Any]) -> str:
+    """Format one ranked vehicle recommendation for CLI display."""
+    lines = [
+        f"{rank}. {item['make']} {item['model']}",
+        f"   Make: {item['make']}",
+        f"   Model: {item['model']}",
+        f"   Recommendation score: {item['normalized_score']:.3f}",
+    ]
+    for year_line in _format_year_range_lines(item.get("selected_year_range")):
+        lines.append(f"   {year_line}")
+    reasons = item.get("reasons") or []
+    if reasons:
+        lines.append("   Reasons:")
+        for reason in reasons[:MAX_REASON_LINES]:
+            lines.append(f"     - {_format_reason_line(reason)}")
+    return "\n".join(lines)
+
+
+def run_show_recommendations(
+    *,
+    buyer_profile_id: str,
+    top_models: int,
+) -> int:
+    """List top recommended models without querying live inventory."""
+    buyer_data = load_buyer_profiles()
+    buyer = _find_buyer(buyer_data["profiles"], buyer_profile_id)
+    recommendation_result = recommend(buyer_profile_id, buyer=buyer)
+    recommendations = recommendation_result["recommendations"]
+    if not recommendations:
+        print("Error: no vehicle recommendations available for this profile.", file=sys.stderr)
+        return 1
+
+    effective_top, was_capped = cap_top_model_count(top_models)
+    display_list = recommendations[:effective_top]
+
+    print(f"Buyer profile: {buyer_profile_id}")
+    print(f"Top {len(display_list)} recommended models (no inventory search)")
+    if was_capped:
+        print(f"(showing max {effective_top} models)")
+    print("=" * 60)
+    for rank, item in enumerate(display_list, start=1):
+        print()
+        print(format_recommendation_entry(rank, item))
+    print()
+    print("=" * 60)
+    print("Next: query inventory for one model, e.g.")
+    first = display_list[0]
+    print(
+        f'  python Scripts/demo_live_inventory.py {buyer_profile_id} '
+        f'--selected-index 1 --top {DEFAULT_TOP_N}'
+    )
+    print(
+        f'  python Scripts/demo_live_inventory.py {buyer_profile_id} '
+        f'--selected-model "{first["make"]} {first["model"]}" --top {DEFAULT_TOP_N}'
+    )
+    return 0
 
 
 def _flatten_ranked_entries(ranked: dict[str, Any]) -> list[dict[str, Any]]:
@@ -181,75 +260,26 @@ def _format_listing_result(
     return "\n".join(lines)
 
 
-def run_live_demo(
+def _print_inventory_results(
     *,
-    buyer_profile_id: str,
+    retrieval: dict[str, Any],
+    provider: AutoDevProvider,
     top_n: int,
-    top_model_count: int,
-    max_pages: int,
-    page_size: int,
-    fallback_min_listings: int,
-) -> int:
-    buyer_data = load_buyer_profiles()
-    buyer = _find_buyer(buyer_data["profiles"], buyer_profile_id)
-
-    recommendation_result = recommend(buyer_profile_id, buyer=buyer)
-    recommendations = recommendation_result["recommendations"]
-    if not recommendations:
-        print("Error: no vehicle recommendations available for this profile.", file=sys.stderr)
-        return 1
-
-    print(f"Buyer profile: {buyer_profile_id}")
-    print(
-        "Retrieval: recommendation-driven per-model queries "
-        f"(top_models={top_model_count}, max_pages={max_pages}, page_size={page_size})"
-    )
-    print()
-    print(
-        format_pre_retrieval_diagnostics(
-            provider_name=AUTO_DEV_PROVIDER_NAME,
-            buyer=buyer,
-            recommendations=recommendations,
-            top_model_count=top_model_count,
-        )
-    )
-    print()
-
-    client = AutoDevClient()
-    if not client.has_api_key:
-        print(
-            f"Error: set {AUTODEV_API_KEY_ENV} to query live Auto.dev inventory.",
-            file=sys.stderr,
-        )
-        return 1
-
-    provider = AutoDevProvider(
-        client=client,
-        use_live_api=True,
-        max_pages=max_pages,
-        page_size=page_size,
-    )
-    search_service = ListingSearchService([provider])
-
-    retrieval = retrieve_inventory_for_buyer(
-        buyer_profile_id,
-        search_service,
-        buyer=buyer,
-        top_model_count=top_model_count,
-        fallback_min_listings=fallback_min_listings,
-    )
+    header: str,
+) -> None:
     diagnostics = retrieval["diagnostics"]
     search_result = retrieval["search_result"]
     ranked = retrieval["ranked"]
     unmatched_model_count = len(ranked.get("unmatched_listings") or [])
+
     print(format_post_retrieval_diagnostics(
         diagnostics,
         unmatched_model_count=unmatched_model_count,
     ))
     print()
+
     provider_warnings = list(search_result.provider_warnings)
     provider_errors = list(search_result.errors)
-
     scenarios = [(record["id"], record["listing"]) for record in search_result.listings]
     raw_lookup = {entry_id: listing for entry_id, listing in scenarios}
 
@@ -259,7 +289,7 @@ def run_live_demo(
     )
 
     top_entries = _flatten_ranked_entries(ranked)[:top_n]
-    print(f"Top {len(top_entries)} listings (live Auto.dev inventory)")
+    print(header)
     print("=" * 60)
     for rank, entry in enumerate(top_entries, start=1):
         raw_listing = raw_lookup.get(entry["listing_name"], entry["listing"])
@@ -299,18 +329,177 @@ def run_live_demo(
         print(f"Normalize failures:   {invalid_count}")
     print(f"Unmatched model count: {unmatched_model_count}")
 
+
+def _require_api_key() -> AutoDevClient | None:
+    client = AutoDevClient()
+    if not client.has_api_key:
+        print(
+            f"Error: set {AUTODEV_API_KEY_ENV} to query live Auto.dev inventory.",
+            file=sys.stderr,
+        )
+        return None
+    return client
+
+
+def run_selected_model_inventory(
+    *,
+    buyer_profile_id: str,
+    top_n: int,
+    selected_model: str | None,
+    selected_index: int | None,
+    max_pages: int,
+    page_size: int,
+    fallback_min_listings: int,
+) -> int:
+    buyer_data = load_buyer_profiles()
+    buyer = _find_buyer(buyer_data["profiles"], buyer_profile_id)
+    recommendation_result = recommend(buyer_profile_id, buyer=buyer)
+    recommendations = recommendation_result["recommendations"]
+    if not recommendations:
+        print("Error: no vehicle recommendations available for this profile.", file=sys.stderr)
+        return 1
+
+    selected = resolve_selected_recommendation(
+        recommendations,
+        selected_model=selected_model,
+        selected_index=selected_index,
+    )
+    selected_label = f"{selected['make']} {selected['model']}"
+
+    print(f"Buyer profile: {buyer_profile_id}")
+    print(f"Selected model: {selected_label}")
+    print("Retrieval: single recommended-model inventory search")
+    print(
+        f"(max_pages={max_pages}, page_size={page_size}, "
+        f"fallback_min={fallback_min_listings})"
+    )
+    print()
+    print(
+        format_pre_retrieval_diagnostics(
+            provider_name=AUTO_DEV_PROVIDER_NAME,
+            buyer=buyer,
+            recommendations=[selected],
+            top_model_count=1,
+        )
+    )
+    print()
+
+    client = _require_api_key()
+    if client is None:
+        return 1
+    provider = AutoDevProvider(
+        client=client,
+        use_live_api=True,
+        max_pages=max_pages,
+        page_size=page_size,
+    )
+    search_service = ListingSearchService([provider])
+
+    retrieval = retrieve_inventory_for_selected_model(
+        buyer_profile_id,
+        search_service,
+        buyer=buyer,
+        selected_recommendation=selected,
+        recommendations=recommendations,
+        fallback_min_listings=fallback_min_listings,
+    )
+
+    _print_inventory_results(
+        retrieval=retrieval,
+        provider=provider,
+        top_n=top_n,
+        header=f"Top listings for {selected_label} (live Auto.dev inventory)",
+    )
+    return 0
+
+
+def run_live_demo(
+    *,
+    buyer_profile_id: str,
+    top_n: int,
+    top_model_count: int,
+    max_pages: int,
+    page_size: int,
+    fallback_min_listings: int,
+) -> int:
+    buyer_data = load_buyer_profiles()
+    buyer = _find_buyer(buyer_data["profiles"], buyer_profile_id)
+
+    recommendation_result = recommend(buyer_profile_id, buyer=buyer)
+    recommendations = recommendation_result["recommendations"]
+    if not recommendations:
+        print("Error: no vehicle recommendations available for this profile.", file=sys.stderr)
+        return 1
+
+    print(f"Buyer profile: {buyer_profile_id}")
+    print(
+        "Retrieval: recommendation-driven per-model queries "
+        f"(top_models={top_model_count}, max_pages={max_pages}, page_size={page_size})"
+    )
+    print()
+    print(
+        format_pre_retrieval_diagnostics(
+            provider_name=AUTO_DEV_PROVIDER_NAME,
+            buyer=buyer,
+            recommendations=recommendations,
+            top_model_count=top_model_count,
+        )
+    )
+    print()
+
+    client = _require_api_key()
+    if client is None:
+        return 1
+    provider = AutoDevProvider(
+        client=client,
+        use_live_api=True,
+        max_pages=max_pages,
+        page_size=page_size,
+    )
+    search_service = ListingSearchService([provider])
+
+    retrieval = retrieve_inventory_for_buyer(
+        buyer_profile_id,
+        search_service,
+        buyer=buyer,
+        top_model_count=top_model_count,
+        fallback_min_listings=fallback_min_listings,
+    )
+
+    _print_inventory_results(
+        retrieval=retrieval,
+        provider=provider,
+        top_n=top_n,
+        header=f"Top {top_n} listings (live Auto.dev inventory)",
+    )
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Pull live Auto.dev listings and rank them for a buyer profile.",
+        description="CarLens live inventory: browse recommendations or search one model.",
     )
     parser.add_argument(
         "buyer_profile_id",
         nargs="?",
         default=DEFAULT_BUYER_PROFILE_ID,
         help=f"Buyer profile id (default: {DEFAULT_BUYER_PROFILE_ID})",
+    )
+    parser.add_argument(
+        "--show-recommendations",
+        action="store_true",
+        help="List top recommended models only (no live inventory API calls)",
+    )
+    parser.add_argument(
+        "--selected-model",
+        metavar="MAKE MODEL",
+        help='Search inventory for one model, e.g. "Honda Civic"',
+    )
+    parser.add_argument(
+        "--selected-index",
+        type=int,
+        metavar="N",
+        help="Search inventory for recommendation rank N (1-based)",
     )
     parser.add_argument(
         "--top",
@@ -321,10 +510,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--top-models",
         type=int,
-        default=DEFAULT_LIVE_TOP_MODEL_COUNT,
+        default=None,
         help=(
-            "Number of recommended make/model queries to run first "
-            f"(default: {DEFAULT_LIVE_TOP_MODEL_COUNT}, max 5)"
+            "With --show-recommendations: how many models to list. "
+            f"Otherwise: per-model queries to run (default: {DEFAULT_LIVE_TOP_MODEL_COUNT})"
         ),
     )
     parser.add_argument(
@@ -345,16 +534,59 @@ def main(argv: list[str] | None = None) -> int:
         default=FALLBACK_MIN_LISTINGS,
         help=(
             "Minimum listings before expanded/budget fallback "
-            f"(default: {FALLBACK_MIN_LISTINGS})"
+            f"(default: {FALLBACK_MIN_LISTINGS}; selected-model uses widened year only)"
         ),
     )
     args = parser.parse_args(argv)
 
+    if args.show_recommendations and (
+        args.selected_model is not None or args.selected_index is not None
+    ):
+        print(
+            "Error: use either --show-recommendations or a selection flag, not both.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.selected_model is not None and args.selected_index is not None:
+        print(
+            "Error: use either --selected-model or --selected-index, not both.",
+            file=sys.stderr,
+        )
+        return 1
+
     try:
+        if args.show_recommendations:
+            top_models = (
+                args.top_models
+                if args.top_models is not None
+                else DEFAULT_SHOW_RECOMMENDATIONS_COUNT
+            )
+            return run_show_recommendations(
+                buyer_profile_id=args.buyer_profile_id,
+                top_models=max(top_models, 1),
+            )
+
+        if args.selected_model is not None or args.selected_index is not None:
+            return run_selected_model_inventory(
+                buyer_profile_id=args.buyer_profile_id,
+                top_n=max(args.top, 1),
+                selected_model=args.selected_model,
+                selected_index=args.selected_index,
+                max_pages=max(args.max_pages, 1),
+                page_size=max(args.page_size, 1),
+                fallback_min_listings=max(args.fallback_min, 0),
+            )
+
+        top_model_count = (
+            args.top_models
+            if args.top_models is not None
+            else DEFAULT_LIVE_TOP_MODEL_COUNT
+        )
         return run_live_demo(
             buyer_profile_id=args.buyer_profile_id,
             top_n=max(args.top, 1),
-            top_model_count=max(args.top_models, 1),
+            top_model_count=max(top_model_count, 1),
             max_pages=max(args.max_pages, 1),
             page_size=max(args.page_size, 1),
             fallback_min_listings=max(args.fallback_min, 0),
