@@ -183,6 +183,44 @@ def filters_for_recommendation(
     )
 
 
+def format_provider_query_line(
+    provider_name: str,
+    query: SearchFilters | dict[str, Any],
+) -> str:
+    """Format one provider query for CLI output."""
+    summary = (
+        search_filters_summary(query)
+        if isinstance(query, SearchFilters)
+        else query
+    )
+    make = summary.get("make")
+    model = summary.get("model")
+    if make and model:
+        label = f"{make} {model}"
+    else:
+        label = "budget"
+    parts = [f"- {provider_name}", label]
+    if summary.get("max_price") is not None:
+        parts.append(f"max_price={summary['max_price']}")
+    if summary.get("max_mileage") is not None:
+        parts.append(f"max_mileage={summary['max_mileage']}")
+    return " ".join(parts)
+
+
+def planned_model_queries(
+    buyer: dict[str, Any],
+    recommendations: list[dict[str, Any]],
+    *,
+    top_model_count: int = DEFAULT_TOP_MODEL_COUNT,
+) -> list[dict[str, Any]]:
+    """Return filter summaries for the initial recommended-model query batch."""
+    effective_top, _ = cap_top_model_count(top_model_count)
+    return [
+        search_filters_summary(filters_for_recommendation(recommendation, buyer))
+        for recommendation in recommendations[:effective_top]
+    ]
+
+
 def search_filters_summary(filters: SearchFilters) -> dict[str, Any]:
     """Serialize SearchFilters for diagnostics."""
     return {

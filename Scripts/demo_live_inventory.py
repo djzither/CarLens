@@ -18,30 +18,30 @@ from app.listing_display import (
     format_positive_reasons_for_display,
     format_price,
 )
-from src.listings.auto_dev_client import (
-    AUTODEV_API_KEY_ENV,
-    AutoDevClient,
-    AutoDevSearchParams,
-    iter_auto_dev_provider_rows,
-)
+from src.listings.auto_dev_client import AUTODEV_API_KEY_ENV, AutoDevClient
 from src.listings.listing_confidence import assess_listing_confidence
 from src.listings.listing_quality_summary import (
     ListingQualityWarningsContext,
     build_listing_quality_summary,
 )
-from src.listings.listing_ranker import _listing_sort_key, rank_listings_for_recommendations
-from src.listings.providers import SearchFilters
-from src.listings.providers.auto_dev_provider import (
-    AutoDevProvider,
-    _expand_adapter_warnings,
-    _filters_to_search_params,
+from src.listings.listing_ranker import _listing_sort_key
+from src.listings.providers import AutoDevProvider, ListingSearchService
+from src.listings.recommendation_inventory import (
+    DEFAULT_TOP_MODEL_COUNT,
+    FALLBACK_MIN_LISTINGS,
+    format_diagnostics_report,
+    format_provider_query_line,
+    planned_model_queries,
+    retrieve_inventory_for_buyer,
 )
-from src.listings.providers.search_support import search_raw_listings
 from src.profiles.buyer_profile_loader import load_buyer_profiles
 from src.recommendation.recommendation_engine import recommend
 
 DEFAULT_BUYER_PROFILE_ID = "student"
 DEFAULT_TOP_N = 10
+# Student ranks Mazda3 fourth; default 4 queries Corolla, Civic, Camry, and Mazda3.
+DEFAULT_LIVE_TOP_MODEL_COUNT = 4
+AUTO_DEV_PROVIDER_NAME = "auto.dev"
 
 
 def _find_buyer(profiles: list[dict[str, Any]], buyer_profile_id: str) -> dict[str, Any]:
@@ -51,53 +51,25 @@ def _find_buyer(profiles: list[dict[str, Any]], buyer_profile_id: str) -> dict[s
     raise ValueError(f"buyer profile not found: {buyer_profile_id}")
 
 
-def _buyer_search_filters(buyer: dict[str, Any]) -> SearchFilters:
-    budget = buyer.get("budget_type") or {}
-    max_price = budget.get("max_amount")
-    max_mileage = buyer.get("max_mileage")
-    return SearchFilters(
-        max_price=int(max_price) if max_price is not None else None,
-        max_mileage=int(max_mileage) if max_mileage is not None else None,
-    )
-
-
-def _search_params_with_pagination(
-    filters: SearchFilters,
+def _print_provider_queries(
     *,
-    page_size: int,
-) -> AutoDevSearchParams:
-    base = _filters_to_search_params(filters)
-    return AutoDevSearchParams(
-        make=base.make,
-        model=base.model,
-        price_max=base.price_max,
-        mileage_max=base.mileage_max,
-        year_min=base.year_min,
-        year_max=base.year_max,
-        page=1,
-        page_size=page_size,
-    )
-
-
-def _provider_search_from_payload(
-    provider: AutoDevProvider,
-    *,
-    payload: dict[str, Any],
-    filters: SearchFilters,
-) -> Any:
-    """Run the same normalization + validation path as AutoDevProvider.search."""
-    raw_listings, adapter_warnings = _expand_adapter_warnings(
-        provider._adapt_provider_rows(payload)
-    )
-    total = len(iter_auto_dev_provider_rows(payload))
-    result = search_raw_listings(
-        provider_name=provider.name,
-        raw_listings=raw_listings,
-        filters=filters,
-        validate_listing=provider.validate_listing,
-        total_available=total,
-    )
-    return result, adapter_warnings
+    provider_name: str,
+    buyer: dict[str, Any],
+    recommendations: list[dict[str, Any]],
+    top_model_count: int,
+    extra_queries: list[dict[str, Any]] | None = None,
+) -> None:
+    """Print planned provider queries before any live API calls."""
+    print("Provider queries:")
+    for query in planned_model_queries(
+        buyer,
+        recommendations,
+        top_model_count=top_model_count,
+    ):
+        print(format_provider_query_line(provider_name, query))
+    for query in extra_queries or []:
+        print(format_provider_query_line(provider_name, query))
+    print()
 
 
 def _flatten_ranked_entries(ranked: dict[str, Any]) -> list[dict[str, Any]]:
@@ -172,7 +144,7 @@ def _format_listing_result(
     record = {
         "id": entry["listing_name"],
         "listing": listing,
-        "provider_name": listing.get("source", "auto.dev"),
+        "provider_name": listing.get("source", AUTO_DEV_PROVIDER_NAME),
         "provider_listing_id": listing_id,
         "provider_raw_fields": list(listing.keys()),
     }
@@ -235,12 +207,13 @@ def run_live_demo(
     *,
     buyer_profile_id: str,
     top_n: int,
+    top_model_count: int,
     max_pages: int,
     page_size: int,
+    fallback_min_listings: int,
 ) -> int:
     buyer_data = load_buyer_profiles()
     buyer = _find_buyer(buyer_data["profiles"], buyer_profile_id)
-    filters = _buyer_search_filters(buyer)
 
     client = AutoDevClient()
     if not client.has_api_key:
@@ -250,43 +223,49 @@ def run_live_demo(
         )
         return 1
 
-    params = _search_params_with_pagination(filters, page_size=page_size)
-
-    print(f"Buyer profile: {buyer_profile_id}")
-    print(
-        "Auto.dev filters: "
-        f"max_price={filters.max_price}, max_mileage={filters.max_mileage}, "
-        f"max_pages={max_pages}, page_size={page_size}"
-    )
-    print()
-
-    fetch = client.search_listings_paginated(params, max_pages=max_pages)
-    total_raw = len(iter_auto_dev_provider_rows(fetch.payload))
-    if fetch.errors and not fetch.payload:
-        print("Auto.dev fetch failed:", file=sys.stderr)
-        for message in fetch.errors:
-            print(f"  - {message}", file=sys.stderr)
-        return 1
-
-    provider = AutoDevProvider(client=client, use_live_api=False)
-    search_result, adapter_warnings = _provider_search_from_payload(
-        provider,
-        payload=fetch.payload,
-        filters=filters,
-    )
-    provider_warnings = [*adapter_warnings, *search_result.provider_warnings]
-    provider_errors = list(fetch.errors)
-
     recommendation_result = recommend(buyer_profile_id, buyer=buyer)
     recommendations = recommendation_result["recommendations"]
     if not recommendations:
         print("Error: no vehicle recommendations available for this profile.", file=sys.stderr)
         return 1
 
+    print(f"Buyer profile: {buyer_profile_id}")
+    print(
+        "Retrieval: recommendation-driven per-model queries "
+        f"(top_models={top_model_count}, max_pages={max_pages}, page_size={page_size})"
+    )
+    print()
+    _print_provider_queries(
+        provider_name=AUTO_DEV_PROVIDER_NAME,
+        buyer=buyer,
+        recommendations=recommendations,
+        top_model_count=top_model_count,
+    )
+
+    provider = AutoDevProvider(
+        client=client,
+        use_live_api=True,
+        max_pages=max_pages,
+        page_size=page_size,
+    )
+    search_service = ListingSearchService([provider])
+
+    retrieval = retrieve_inventory_for_buyer(
+        buyer_profile_id,
+        search_service,
+        buyer=buyer,
+        top_model_count=top_model_count,
+        fallback_min_listings=fallback_min_listings,
+    )
+    diagnostics = retrieval["diagnostics"]
+    search_result = retrieval["search_result"]
+    ranked = retrieval["ranked"]
+    provider_warnings = list(search_result.provider_warnings)
+    provider_errors = list(search_result.errors)
+
     scenarios = [(record["id"], record["listing"]) for record in search_result.listings]
     raw_lookup = {entry_id: listing for entry_id, listing in scenarios}
 
-    ranked = rank_listings_for_recommendations(scenarios, recommendations, buyer)
     pipeline = ranked.get("pipeline") or {}
     duplicates = int(pipeline.get("raw_count", len(scenarios))) - int(
         pipeline.get("deduped_count", len(scenarios))
@@ -309,7 +288,9 @@ def run_live_demo(
     print("=" * 60)
     print("Inventory summary")
     print("=" * 60)
-    print(f"Total raw listings:   {total_raw}")
+    print(format_diagnostics_report(diagnostics))
+    print()
+    print(f"Total raw listings:   {diagnostics.metrics.raw_retrieved}")
     print(f"Total valid listings: {len(search_result.listings)}")
     print(f"Skipped listings:     {_skipped_count(provider_warnings)}")
     print(f"Warnings count:       {len(provider_warnings)}")
@@ -320,6 +301,11 @@ def run_live_demo(
         print()
         print("Provider errors:")
         for message in provider_errors:
+            print(f"  - {message}")
+    if provider.last_fetch_errors:
+        print()
+        print("Auto.dev fetch notes:")
+        for message in provider.last_fetch_errors:
             print(f"  - {message}")
     invalid_count = len(ranked.get("invalid_listings") or [])
     if invalid_count:
@@ -348,16 +334,34 @@ def main(argv: list[str] | None = None) -> int:
         help=f"Number of listings to print (default: {DEFAULT_TOP_N})",
     )
     parser.add_argument(
+        "--top-models",
+        type=int,
+        default=DEFAULT_LIVE_TOP_MODEL_COUNT,
+        help=(
+            "Number of recommended make/model queries to run first "
+            f"(default: {DEFAULT_LIVE_TOP_MODEL_COUNT}, max 5)"
+        ),
+    )
+    parser.add_argument(
         "--max-pages",
         type=int,
         default=2,
-        help="Maximum Auto.dev pages to fetch (default: 2)",
+        help="Maximum Auto.dev pages to fetch per model query (default: 2)",
     )
     parser.add_argument(
         "--page-size",
         type=int,
         default=20,
-        help="Auto.dev page size (default: 20)",
+        help="Auto.dev page size per query (default: 20)",
+    )
+    parser.add_argument(
+        "--fallback-min",
+        type=int,
+        default=FALLBACK_MIN_LISTINGS,
+        help=(
+            "Minimum listings before expanded/budget fallback "
+            f"(default: {FALLBACK_MIN_LISTINGS})"
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -365,8 +369,10 @@ def main(argv: list[str] | None = None) -> int:
         return run_live_demo(
             buyer_profile_id=args.buyer_profile_id,
             top_n=max(args.top, 1),
+            top_model_count=max(args.top_models, 1),
             max_pages=max(args.max_pages, 1),
             page_size=max(args.page_size, 1),
+            fallback_min_listings=max(args.fallback_min, 0),
         )
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)

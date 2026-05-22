@@ -64,6 +64,8 @@ class AutoDevProvider(RawListingProvider):
         *,
         client: AutoDevClient | None = None,
         use_live_api: bool = True,
+        max_pages: int = 10,
+        page_size: int | None = None,
     ) -> None:
         self._fixture_path = (
             Path(fixture_path) if fixture_path is not None else DEFAULT_FIXTURE_PATH
@@ -71,6 +73,8 @@ class AutoDevProvider(RawListingProvider):
         self._payload: dict[str, Any] | None = None
         self._client = client if client is not None else AutoDevClient()
         self._use_live_api = use_live_api
+        self._max_pages = max(1, max_pages)
+        self._page_size = page_size
         self._last_fetch_errors: list[str] = []
 
     @property
@@ -109,7 +113,21 @@ class AutoDevProvider(RawListingProvider):
         if not self._use_live_api or not self._client.has_api_key:
             return [], []
 
-        result = self._client.search_listings_paginated(_filters_to_search_params(filters))
+        base = _filters_to_search_params(filters)
+        params = AutoDevSearchParams(
+            make=base.make,
+            model=base.model,
+            price_max=base.price_max,
+            mileage_max=base.mileage_max,
+            year_min=base.year_min,
+            year_max=base.year_max,
+            page=1,
+            page_size=self._page_size,
+        )
+        result = self._client.search_listings_paginated(
+            params,
+            max_pages=self._max_pages,
+        )
         if result.errors:
             return [], result.errors
         if not result.payload:
