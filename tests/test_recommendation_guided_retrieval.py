@@ -155,14 +155,8 @@ def test_selected_model_builds_search_filters_with_make_and_model(
     assert filters.max_mileage == buyer["max_mileage"]
 
 
-def test_honda_civic_selection_only_queries_civic_inventory(
-    student_recommendations: list[dict[str, Any]],
-) -> None:
+def test_honda_civic_selection_only_queries_civic_inventory() -> None:
     buyer = _student_buyer()
-    civic = resolve_selected_recommendation(
-        student_recommendations,
-        selected_model="Honda Civic",
-    )
     civic_listing = _provider_record(entry_id="civic-1", make="Honda", model="Civic")
     crosstrek = _provider_record(entry_id="sub-1", make="Subaru", model="XV")
 
@@ -175,10 +169,10 @@ def test_honda_civic_selection_only_queries_civic_inventory(
     service = ListingSearchService([provider])
     result = retrieve_inventory_for_selected_model(
         "student",
+        "Honda",
+        "Civic",
         service,
         buyer=buyer,
-        selected_recommendation=civic,
-        recommendations=student_recommendations,
         fallback_min_listings=1,
     )
 
@@ -190,24 +184,18 @@ def test_honda_civic_selection_only_queries_civic_inventory(
     assert result["search_result"].listings[0]["listing"]["model"] == "Civic"
 
 
-def test_selected_model_ranked_results_exclude_unrelated_models(
-    student_recommendations: list[dict[str, Any]],
-) -> None:
+def test_selected_model_ranked_results_exclude_unrelated_models() -> None:
     buyer = _student_buyer()
-    civic = resolve_selected_recommendation(
-        student_recommendations,
-        selected_model="Honda Civic",
-    )
     civic_listing = _provider_record(entry_id="civic-1", make="Honda", model="Civic")
     provider = _RecordingProvider({("Honda", "Civic"): [civic_listing]})
     service = ListingSearchService([provider])
 
     result = retrieve_inventory_for_selected_model(
         "student",
+        "Honda",
+        "Civic",
         service,
         buyer=buyer,
-        selected_recommendation=civic,
-        recommendations=student_recommendations,
         fallback_min_listings=1,
     )
 
@@ -215,6 +203,7 @@ def test_selected_model_ranked_results_exclude_unrelated_models(
         assert record["listing"]["make"] == "Honda"
         assert record["listing"]["model"] == "Civic"
     assert len(result["ranked"].get("unmatched_listings") or []) == 0
+    assert result["ranked"].get("single_model_mode") is True
 
 
 # --- 3. Invalid selection handling ---
@@ -358,24 +347,18 @@ def test_budget_fallback_preserves_recommended_model_pairs() -> None:
 # --- 5. Retrieval diagnostics ---
 
 
-def test_selected_model_retrieval_diagnostics(
-    student_recommendations: list[dict[str, Any]],
-) -> None:
+def test_selected_model_retrieval_diagnostics() -> None:
     buyer = _student_buyer()
-    civic = resolve_selected_recommendation(
-        student_recommendations,
-        selected_model="Honda Civic",
-    )
     civic_listing = _provider_record(entry_id="civic-1", make="Honda", model="Civic")
     provider = _RecordingProvider({("Honda", "Civic"): [civic_listing]})
     service = ListingSearchService([provider])
 
     result = retrieve_inventory_for_selected_model(
         "student",
+        "Honda",
+        "Civic",
         service,
         buyer=buyer,
-        selected_recommendation=civic,
-        recommendations=student_recommendations,
         fallback_min_listings=1,
     )
     diagnostics = result["diagnostics"]
@@ -391,6 +374,8 @@ def test_selected_model_retrieval_diagnostics(
     assert all(search.get("make") == "Honda" for search in diagnostics.provider_searches)
     assert all(search.get("model") == "Civic" for search in diagnostics.provider_searches)
     assert diagnostics.fallback_triggered is False
+    assert diagnostics.constrained_fallback_triggered is False
+    assert result["ranked"].get("single_model_mode") is True
 
     report = format_post_retrieval_diagnostics(
         diagnostics,

@@ -186,6 +186,8 @@ def test_resolve_selected_recommendation_by_index_and_label() -> None:
 def test_selected_model_inventory_keeps_make_model_on_fallback() -> None:
     recommendations = recommend("student")["recommendations"]
     selected = resolve_selected_recommendation(recommendations, selected_index=2)
+    make = selected["make"]
+    model = selected["model"]
 
     class _NarrowThenWideProvider(ListingProvider):
         name = "recording"
@@ -195,16 +197,16 @@ def test_selected_model_inventory_keeps_make_model_on_fallback() -> None:
 
         def search(self, filters: SearchFilters) -> SearchResult:
             self.calls.append(filters)
-            assert filters.make == selected["make"]
-            assert filters.model == selected["model"]
-            if filters.min_year is not None:
+            assert filters.make == make
+            assert filters.model == model
+            if len(self.calls) == 1:
                 return SearchResult(listings=[], provider_name=self.name)
             return SearchResult(
                 listings=[
                     _provider_record(
                         entry_id="wide-1",
-                        make=selected["make"],
-                        model=selected["model"],
+                        make=make,
+                        model=model,
                     )
                 ],
                 provider_name=self.name,
@@ -217,25 +219,30 @@ def test_selected_model_inventory_keeps_make_model_on_fallback() -> None:
     service = ListingSearchService([provider])
     result = retrieve_inventory_for_selected_model(
         "student",
+        make,
+        model,
         service,
         buyer=_student_buyer(),
-        selected_recommendation=selected,
-        recommendations=recommendations,
         fallback_min_listings=1,
     )
     diagnostics = result["diagnostics"]
 
     assert diagnostics.fallback_triggered is False
+    assert diagnostics.constrained_fallback_triggered is True
     assert diagnostics.expanded_fallback_triggered is True
     assert len(provider.calls) == 2
-    assert all(call.make == selected["make"] for call in provider.calls)
-    assert all(call.model == selected["model"] for call in provider.calls)
+    assert all(call.make == make for call in provider.calls)
+    assert all(call.model == model for call in provider.calls)
     assert not any(call.make is None and call.model is None for call in provider.calls)
+    assert result["ranked"].get("single_model_mode") is True
+    assert len(result["ranked"].get("unmatched_listings") or []) == 0
 
 
 def test_selected_model_inventory_does_not_use_budget_fallback() -> None:
     recommendations = recommend("student")["recommendations"]
     selected = resolve_selected_recommendation(recommendations, selected_index=1)
+    make = selected["make"]
+    model = selected["model"]
     crosstrek = _provider_record(entry_id="sub-1", make="Subaru", model="XV")
     corolla = _provider_record(entry_id="cor-1", make="Toyota", model="Corolla")
 
@@ -258,16 +265,19 @@ def test_selected_model_inventory_does_not_use_budget_fallback() -> None:
     service = ListingSearchService([provider])
     result = retrieve_inventory_for_selected_model(
         "student",
+        make,
+        model,
         service,
         buyer=_student_buyer(),
-        selected_recommendation=selected,
-        recommendations=recommendations,
         fallback_min_listings=5,
     )
 
+    diagnostics = result["diagnostics"]
     assert len(provider.calls) == 2
     assert not any(call.make is None and call.model is None for call in provider.calls)
     assert len(result["search_result"].listings) == 0
+    assert diagnostics.constrained_fallback_triggered is True
+    assert diagnostics.fallback_triggered is False
 
 
 def test_student_profile_creates_corolla_and_civic_searches() -> None:

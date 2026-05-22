@@ -6,10 +6,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.listings.listing_ranker import (
-    rank_listings_for_recommendations,
-    rank_listings_for_single_model,
-)
+from src.listings.listing_ranker import rank_listings_for_recommendations
 from src.listings.providers.schema import validate_provider_listing_record
 from src.listings.providers.search_service import AGGREGATED_PROVIDER_NAME
 from src.listings.providers.types import SearchFilters, SearchResult
@@ -1038,7 +1035,11 @@ def retrieve_inventory_for_selected_model(
     diagnostics.listing_count = collected_count
 
     scenarios = provider_records_to_scenarios(merged.listings)
-    ranked = rank_listings_for_single_model(scenarios, recommendation, buyer)
+    ranked = rank_listings_for_recommendations(
+        scenarios,
+        [recommendation],
+        buyer,
+    )
     pipeline = ranked.get("pipeline") or {}
     diagnostics.duplicates_removed = max(
         0,
