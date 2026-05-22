@@ -8,6 +8,7 @@ from app.listing_display import (
     SUMMARY_BADGE_TOP_PICK,
     STRONG_FIT_LOW_CONFIDENCE_CAPTION,
     STRONG_FIT_LOW_CONFIDENCE_HEADLINE,
+    AUTO_DEV_TITLE_UNKNOWN_DETAIL,
     TITLE_DIRTY_HEADLINE,
     TITLE_UNKNOWN_HEADLINE,
     CAUTION_PREFIX,
@@ -510,11 +511,14 @@ def test_weak_fit_high_data_quality_on_card_entry() -> None:
 def test_title_status_blocks_dirty_vs_unknown() -> None:
     dirty_block = format_title_status_block("dirty")
     unknown_block = format_title_status_block("unknown")
+    auto_dev_unknown = format_title_status_block("unknown", source="auto.dev")
 
     assert TITLE_DIRTY_HEADLINE in dirty_block
     assert TITLE_UNKNOWN_HEADLINE in unknown_block
     assert "dirty title" not in unknown_block.casefold()
     assert len(dirty_block) > len(unknown_block)
+    assert AUTO_DEV_TITLE_UNKNOWN_DETAIL in auto_dev_unknown
+    assert "Ask seller for title documentation" not in auto_dev_unknown
 
 
 def test_strong_fit_with_medium_data_on_card_alerts() -> None:

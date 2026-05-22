@@ -113,10 +113,8 @@ def _coerce_optional_bool(value: Any) -> bool | None:
 
 
 def _status_value_is_dirty(value: Any) -> bool:
-    if value is None:
+    if value is None or isinstance(value, bool):
         return False
-    if isinstance(value, bool):
-        return value is False
     text = str(value).strip().casefold()
     if not text:
         return False
@@ -147,9 +145,6 @@ def _explicit_dirty_status_value(provider_listing: dict[str, Any]) -> bool:
     for block in (retail, wholesale, history, vehicle, provider_listing):
         for key in _EXPLICIT_STATUS_KEYS:
             if key in block and _status_value_is_dirty(block.get(key)):
-                return True
-        for key, value in block.items():
-            if _is_title_related_key(key) and _status_value_is_dirty(value):
                 return True
     return False
 

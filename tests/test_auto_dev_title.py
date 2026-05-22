@@ -51,6 +51,7 @@ def test_missing_title_information_maps_to_unknown() -> None:
     assert raw["title_status"] == "unknown"
     diagnostics = pop_title_diagnostics(raw)
     assert diagnostics is not None
+    assert diagnostics["title_certainty"] == "unknown"
     assert diagnostics["normalized_title_status"] == "unknown"
     assert diagnostics["title_certainty"] == "unknown"
 

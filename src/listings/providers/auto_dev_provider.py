@@ -166,8 +166,9 @@ class AutoDevProvider(RawListingProvider):
 
         for row in _iter_auto_dev_rows(self._resolved_fixture_payload()):
             raw = adapt_auto_dev_listing(row)
-            if raw_listing_matches_id(raw, provider_listing_id):
-                return raw
+            cleaned, _ = _expand_adapter_warnings([raw])
+            if cleaned and raw_listing_matches_id(cleaned[0], provider_listing_id):
+                return cleaned[0]
         return None
 
     def search(self, filters: SearchFilters) -> SearchResult:
