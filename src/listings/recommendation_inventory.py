@@ -115,6 +115,96 @@ class InventorySearchDiagnostics:
         }
 
 
+def format_recommended_models(
+    recommendations: list[dict[str, Any]],
+    *,
+    top_model_count: int = DEFAULT_TOP_MODEL_COUNT,
+) -> list[dict[str, str]]:
+    """Top recommended make/model pairs for the initial retrieval batch."""
+    effective_top, _ = cap_top_model_count(top_model_count)
+    return [
+        {"make": item["make"], "model": item["model"]}
+        for item in recommendations[:effective_top]
+    ]
+
+
+def _query_label_from_summary(summary: dict[str, Any]) -> str:
+    make = summary.get("make")
+    model = summary.get("model")
+    if make and model:
+        return f"{make} {model}"
+    if summary.get("retrieval_source") == RETRIEVAL_SOURCE_BUDGET_FALLBACK:
+        return "budget_fallback"
+    return "budget"
+
+
+def format_listings_per_query_lines(
+    listings_per_query: list[dict[str, Any]],
+    *,
+    pending: bool = False,
+) -> list[str]:
+    """Format per-query listing counts for CLI diagnostics."""
+    lines = ["Listings returned per query:"]
+    if pending:
+        lines.append("  (pending)")
+        return lines
+    if not listings_per_query:
+        lines.append("  (none)")
+        return lines
+    for row in listings_per_query:
+        label = _query_label_from_summary(row)
+        lines.append(f"  - {label}: {row.get('count', 0)}")
+    return lines
+
+
+def format_pre_retrieval_diagnostics(
+    *,
+    provider_name: str,
+    buyer: dict[str, Any],
+    recommendations: list[dict[str, Any]],
+    top_model_count: int = DEFAULT_TOP_MODEL_COUNT,
+    extra_queries: list[dict[str, Any]] | None = None,
+) -> str:
+    """Diagnostics printed before any live provider API calls."""
+    lines = ["Recommended models:"]
+    for model in format_recommended_models(
+        recommendations,
+        top_model_count=top_model_count,
+    ):
+        lines.append(f"  - {model['make']} {model['model']}")
+    lines.append("Provider queries:")
+    for query in planned_model_queries(
+        buyer,
+        recommendations,
+        top_model_count=top_model_count,
+    ):
+        lines.append(f"  {format_provider_query_line(provider_name, query)}")
+    for query in extra_queries or []:
+        lines.append(f"  {format_provider_query_line(provider_name, query)}")
+    lines.extend(format_listings_per_query_lines([], pending=True))
+    lines.extend(
+        [
+            "Fallback triggered: no",
+            "Unmatched model count: 0",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def format_post_retrieval_diagnostics(
+    diagnostics: InventorySearchDiagnostics,
+    *,
+    unmatched_model_count: int,
+) -> str:
+    """Per-query counts and fallback/unmatched status after retrieval."""
+    lines = format_listings_per_query_lines(diagnostics.listings_per_query)
+    lines.append(
+        f"Fallback triggered: {'yes' if diagnostics.fallback_triggered else 'no'}"
+    )
+    lines.append(f"Unmatched model count: {unmatched_model_count}")
+    return "\n".join(lines)
+
+
 def format_diagnostics_report(diagnostics: InventorySearchDiagnostics) -> str:
     """Human-readable diagnostics block for CLI or logs."""
     metrics = diagnostics.metrics
@@ -127,11 +217,12 @@ def format_diagnostics_report(diagnostics: InventorySearchDiagnostics) -> str:
     lines = [
         f"Recommended models: {diagnostics.recommended_models}",
         f"Provider queries: {len(diagnostics.provider_searches)}",
+        *format_listings_per_query_lines(diagnostics.listings_per_query),
+        f"Fallback triggered: {'yes' if diagnostics.fallback_triggered else 'no'}",
         f"API calls: {api_calls}",
         f"Cache hits: {metrics.cache_hits} "
         f"(hit rate {metrics.cache_hit_rate:.0%})",
         f"Duplicates removed: {diagnostics.duplicates_removed}",
-        f"Fallback triggered: {diagnostics.fallback_triggered}",
         f"Retrieval efficiency: {metrics.retrieval_efficiency:.2f}",
     ]
     if diagnostics.warnings:

@@ -27,11 +27,10 @@ from src.listings.listing_quality_summary import (
 from src.listings.listing_ranker import _listing_sort_key
 from src.listings.providers import AutoDevProvider, ListingSearchService
 from src.listings.recommendation_inventory import (
-    DEFAULT_TOP_MODEL_COUNT,
     FALLBACK_MIN_LISTINGS,
     format_diagnostics_report,
-    format_provider_query_line,
-    planned_model_queries,
+    format_post_retrieval_diagnostics,
+    format_pre_retrieval_diagnostics,
     retrieve_inventory_for_buyer,
 )
 from src.profiles.buyer_profile_loader import load_buyer_profiles
@@ -49,27 +48,6 @@ def _find_buyer(profiles: list[dict[str, Any]], buyer_profile_id: str) -> dict[s
         if profile["id"] == buyer_profile_id:
             return profile
     raise ValueError(f"buyer profile not found: {buyer_profile_id}")
-
-
-def _print_provider_queries(
-    *,
-    provider_name: str,
-    buyer: dict[str, Any],
-    recommendations: list[dict[str, Any]],
-    top_model_count: int,
-    extra_queries: list[dict[str, Any]] | None = None,
-) -> None:
-    """Print planned provider queries before any live API calls."""
-    print("Provider queries:")
-    for query in planned_model_queries(
-        buyer,
-        recommendations,
-        top_model_count=top_model_count,
-    ):
-        print(format_provider_query_line(provider_name, query))
-    for query in extra_queries or []:
-        print(format_provider_query_line(provider_name, query))
-    print()
 
 
 def _flatten_ranked_entries(ranked: dict[str, Any]) -> list[dict[str, Any]]:
@@ -215,14 +193,6 @@ def run_live_demo(
     buyer_data = load_buyer_profiles()
     buyer = _find_buyer(buyer_data["profiles"], buyer_profile_id)
 
-    client = AutoDevClient()
-    if not client.has_api_key:
-        print(
-            f"Error: set {AUTODEV_API_KEY_ENV} to query live Auto.dev inventory.",
-            file=sys.stderr,
-        )
-        return 1
-
     recommendation_result = recommend(buyer_profile_id, buyer=buyer)
     recommendations = recommendation_result["recommendations"]
     if not recommendations:
@@ -235,12 +205,23 @@ def run_live_demo(
         f"(top_models={top_model_count}, max_pages={max_pages}, page_size={page_size})"
     )
     print()
-    _print_provider_queries(
-        provider_name=AUTO_DEV_PROVIDER_NAME,
-        buyer=buyer,
-        recommendations=recommendations,
-        top_model_count=top_model_count,
+    print(
+        format_pre_retrieval_diagnostics(
+            provider_name=AUTO_DEV_PROVIDER_NAME,
+            buyer=buyer,
+            recommendations=recommendations,
+            top_model_count=top_model_count,
+        )
     )
+    print()
+
+    client = AutoDevClient()
+    if not client.has_api_key:
+        print(
+            f"Error: set {AUTODEV_API_KEY_ENV} to query live Auto.dev inventory.",
+            file=sys.stderr,
+        )
+        return 1
 
     provider = AutoDevProvider(
         client=client,
@@ -260,6 +241,12 @@ def run_live_demo(
     diagnostics = retrieval["diagnostics"]
     search_result = retrieval["search_result"]
     ranked = retrieval["ranked"]
+    unmatched_model_count = len(ranked.get("unmatched_listings") or [])
+    print(format_post_retrieval_diagnostics(
+        diagnostics,
+        unmatched_model_count=unmatched_model_count,
+    ))
+    print()
     provider_warnings = list(search_result.provider_warnings)
     provider_errors = list(search_result.errors)
 
@@ -310,9 +297,7 @@ def run_live_demo(
     invalid_count = len(ranked.get("invalid_listings") or [])
     if invalid_count:
         print(f"Normalize failures:   {invalid_count}")
-    unmatched = len(ranked.get("unmatched_listings") or [])
-    if unmatched:
-        print(f"Unmatched models:     {unmatched}")
+    print(f"Unmatched model count: {unmatched_model_count}")
 
     return 0
 

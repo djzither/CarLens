@@ -28,6 +28,9 @@ from src.listings.recommendation_inventory import (
     count_weak_fits,
     filters_for_recommendation,
     format_diagnostics_report,
+    format_post_retrieval_diagnostics,
+    format_pre_retrieval_diagnostics,
+    format_provider_query_line,
     merge_search_results,
     retrieve_inventory_for_buyer,
 )
@@ -89,6 +92,78 @@ def _provider_record(
         "provider_raw_fields": list(listing.keys()),
         "listing": listing,
     }
+
+
+def test_pre_retrieval_diagnostics_student_queries() -> None:
+    buyer = _student_buyer()
+    recommendations = recommend("student")["recommendations"]
+    report = format_pre_retrieval_diagnostics(
+        provider_name="auto.dev",
+        buyer=buyer,
+        recommendations=recommendations,
+        top_model_count=3,
+    )
+
+    assert "Recommended models:" in report
+    assert "  - Toyota Corolla" in report
+    assert "  - Honda Civic" in report
+    assert "  - Toyota Camry" in report
+    assert (
+        format_provider_query_line(
+            "auto.dev",
+            filters_for_recommendation(recommendations[0], buyer),
+        )
+        in report
+    )
+    assert "max_price=12000" in report
+    assert "max_mileage=130000" in report
+    assert "Listings returned per query:" in report
+    assert "(pending)" in report
+    assert "Fallback triggered: no" in report
+    assert "Unmatched model count: 0" in report
+
+
+def test_pre_retrieval_diagnostics_includes_mazda3_at_four_models() -> None:
+    buyer = _student_buyer()
+    recommendations = recommend("student")["recommendations"]
+    report = format_pre_retrieval_diagnostics(
+        provider_name="auto.dev",
+        buyer=buyer,
+        recommendations=recommendations,
+        top_model_count=4,
+    )
+
+    assert "  - Mazda Mazda3" in report
+
+
+def test_post_retrieval_diagnostics_reports_fallback_and_counts() -> None:
+    sparse = _RecordingProvider(
+        {
+            ("Toyota", "Corolla"): [_provider_record(entry_id="c1", make="Toyota", model="Corolla")],
+            (None, None): [
+                _provider_record(entry_id=f"b{i}", make="Honda", model="Civic")
+                for i in range(FALLBACK_MIN_LISTINGS)
+            ],
+        }
+    )
+    service = ListingSearchService([sparse])
+    result = retrieve_inventory_for_buyer(
+        "student",
+        service,
+        buyer=_student_buyer(),
+        top_model_count=1,
+    )
+    diagnostics = result["diagnostics"]
+    unmatched = len(result["ranked"].get("unmatched_listings") or [])
+    report = format_post_retrieval_diagnostics(
+        diagnostics,
+        unmatched_model_count=unmatched,
+    )
+
+    assert "Listings returned per query:" in report
+    assert "Fallback triggered: yes" in report
+    assert "budget_fallback" in report
+    assert f"Unmatched model count: {unmatched}" in report
 
 
 def test_student_profile_creates_corolla_and_civic_searches() -> None:
@@ -362,6 +437,8 @@ def test_metrics_emitted() -> None:
     report = format_diagnostics_report(result["diagnostics"])
     assert "Retrieval efficiency:" in report
     assert "API calls:" in report
+    assert "Fallback triggered:" in report
+    assert "Listings returned per query:" in report
 
 
 def test_query_cache_records_hits() -> None:
