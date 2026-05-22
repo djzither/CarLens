@@ -230,6 +230,8 @@ def test_selected_model_inventory_keeps_make_model_on_fallback() -> None:
     assert diagnostics.fallback_triggered is False
     assert diagnostics.constrained_fallback_triggered is True
     assert diagnostics.expanded_fallback_triggered is True
+    assert diagnostics.is_single_model_retrieval() is True
+    assert diagnostics.fallback_results_added == 1
     assert len(provider.calls) == 2
     assert all(call.make == make for call in provider.calls)
     assert all(call.model == model for call in provider.calls)
@@ -593,6 +595,7 @@ def test_fallback_removes_non_recommended_models() -> None:
     diagnostics = result["diagnostics"]
 
     assert diagnostics.fallback_triggered is True
+    assert diagnostics.fallback_results_added == 3
     pairs = {
         (record["listing"]["make"], record["listing"]["model"])
         for record in result["search_result"].listings

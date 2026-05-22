@@ -80,7 +80,14 @@ class RetrievalMetrics:
 
 @dataclass
 class InventorySearchDiagnostics:
-    """Diagnostics for a recommendation-driven inventory pull."""
+    """
+    Diagnostics for a recommendation-driven inventory pull.
+
+    Fallback flags (``fallback_triggered``, ``constrained_fallback_triggered``,
+    ``expanded_fallback_triggered``) mean a fallback query was **attempted**,
+    not that it added listings. Use ``fallback_results_added`` for net new
+    listings after a fallback attempt.
+    """
 
     recommended_models: list[dict[str, str]] = field(default_factory=list)
     selected_model: str | None = None
@@ -90,6 +97,7 @@ class InventorySearchDiagnostics:
     fallback_broadening_applied: dict[str, Any] | None = None
     initial_result_count: int = 0
     fallback_result_count: int = 0
+    fallback_results_added: int | None = None
     final_result_count: int = 0
     provider_query_params: list[dict[str, Any]] = field(default_factory=list)
     provider_searches: list[dict[str, Any]] = field(default_factory=list)
@@ -109,6 +117,10 @@ class InventorySearchDiagnostics:
     warnings: list[str] = field(default_factory=list)
     metrics: RetrievalMetrics = field(default_factory=RetrievalMetrics)
 
+    def is_single_model_retrieval(self) -> bool:
+        """True when retrieval targeted one selected make/model (not multi-model batch)."""
+        return self.selected_model is not None and len(self.recommended_models) == 1
+
     def as_dict(self) -> dict[str, Any]:
         provider_params = self.provider_query_params or self.provider_searches
         return {
@@ -120,6 +132,7 @@ class InventorySearchDiagnostics:
             "fallback_broadening_applied": self.fallback_broadening_applied,
             "initial_result_count": self.initial_result_count,
             "fallback_result_count": self.fallback_result_count,
+            "fallback_results_added": self.fallback_results_added,
             "final_result_count": self.final_result_count,
             "provider_query_params": provider_params,
             "provider_searches": self.provider_searches,
@@ -776,6 +789,20 @@ def retrieve_inventory_for_buyer(
 
     Applies guardrails (model cap, early stop, progressive fallback) and records
     retrieval efficiency metrics without changing provider or ranking logic.
+
+    Raises:
+        ValueError: Unknown ``buyer_profile_id`` (when ``buyer`` is omitted), or no
+            recommendations for the profile.
+
+    Provider errors:
+        Provider failures are collected on ``search_result.errors``; they do not
+        raise from this function. Callers should surface ``errors`` and
+        ``provider_warnings`` to the user when present.
+
+    Caller behavior:
+        Use ``diagnostics`` for query/fallback status. ``fallback_triggered`` means
+        a budget fallback was attempted, not that listings were added; check
+        ``fallback_results_added`` when set.
     """
     if buyer is None:
         buyer_data = load_buyer_profiles()
@@ -867,6 +894,7 @@ def retrieve_inventory_for_buyer(
                 collected_count = len(merged.listings)
 
     if collected_count < fallback_min_listings:
+        before_fallback_count = collected_count
         fallback_filters = buyer_budget_filters(buyer)
         all_recommended_models = recommended_model_keys(recommendations)
         diagnostics.fallback_triggered = True
@@ -899,6 +927,10 @@ def retrieve_inventory_for_buyer(
         merged, aggregator_dupes = merge_search_results(per_query_results)
         diagnostics.aggregator_duplicates_removed = aggregator_dupes
         collected_count = len(merged.listings)
+        diagnostics.fallback_results_added = max(
+            0,
+            collected_count - before_fallback_count,
+        )
 
     if diagnostics.metrics.provider_query_count > MAX_PROVIDER_QUERIES_WARN:
         diagnostics.warnings.append(
@@ -949,6 +981,24 @@ def retrieve_inventory_for_selected_model(
     Initial query preserves make/model, budget, mileage, and recommendation year range.
     When results are insufficient, optionally broadens year, mileage, and price ceiling
     for the same make/model — never other models or budget-only retrieval.
+
+    Raises:
+        ValueError: Unsupported ``fallback_strategy`` (only ``'constrained'``).
+        ValueError: Unknown ``buyer_profile_id`` when ``buyer`` is omitted.
+        ValueError: No recommendations for the profile.
+
+    Provider errors:
+        Provider failures are collected on ``search_result.errors``; they do not
+        raise from this function. Inspect ``search_result.errors`` and
+        ``search_result.provider_warnings`` before presenting listings.
+
+    Caller behavior:
+        Read ``ranked`` with ``single_model_mode`` set. ``unmatched_listings`` is
+        always empty in that mode. Use ``diagnostics.is_single_model_retrieval()``
+        and ``diagnostics.fallback_results_added`` (after constrained fallback) to
+        explain whether a fallback attempt added inventory.
+        ``constrained_fallback_triggered`` means the broader same-model query ran,
+        not that results improved.
     """
     if fallback_strategy != "constrained":
         raise ValueError(
@@ -1029,6 +1079,10 @@ def retrieve_inventory_for_selected_model(
         merged = filter_search_result_to_make_model(merged, make, model)
         diagnostics.aggregator_duplicates_removed = aggregator_dupes
         collected_count = len(merged.listings)
+        diagnostics.fallback_results_added = max(
+            0,
+            collected_count - diagnostics.initial_result_count,
+        )
 
     diagnostics.provider_query_params = list(diagnostics.provider_searches)
     diagnostics.final_result_count = collected_count

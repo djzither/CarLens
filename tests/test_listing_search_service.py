@@ -134,3 +134,18 @@ def test_dedupes_same_provider_listing_id(multi_service: ListingSearchService) -
         for r in result.listings
     ]
     assert len(ids) == len(set(ids))
+
+
+def test_search_filters_rejects_make_without_model() -> None:
+    with pytest.raises(ValueError, match="make and model must both"):
+        SearchFilters(make="Toyota")
+
+
+def test_search_filters_rejects_model_without_make() -> None:
+    with pytest.raises(ValueError, match="make and model must both"):
+        SearchFilters(model="Corolla")
+
+
+def test_search_filters_accepts_both_omitted_or_both_set() -> None:
+    SearchFilters()
+    SearchFilters(make="Toyota", model="Corolla")

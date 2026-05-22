@@ -375,6 +375,7 @@ def test_selected_model_retrieval_diagnostics() -> None:
     assert all(search.get("model") == "Civic" for search in diagnostics.provider_searches)
     assert diagnostics.fallback_triggered is False
     assert diagnostics.constrained_fallback_triggered is False
+    assert diagnostics.is_single_model_retrieval() is True
     assert result["ranked"].get("single_model_mode") is True
 
     report = format_post_retrieval_diagnostics(

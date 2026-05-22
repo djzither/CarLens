@@ -205,7 +205,22 @@ def rank_listings_for_recommendations(
     recommendations: list[dict[str, Any]],
     buyer: dict[str, Any],
 ) -> dict[str, Any]:
-    """Normalize, dedupe, then group listings by recommendation and rank fit."""
+    """
+    Normalize, dedupe, group listings by recommendation, and rank fit.
+
+    Return shape:
+    - ``groups``: one entry per recommendation (in recommendation order).
+    - ``unmatched_listings``: listings whose make/model do not match any
+      recommendation — except in single-model mode (see below).
+    - ``invalid_listings``: records that failed normalization.
+    - ``pipeline``: raw/normalized/deduped counts.
+
+    Single-model mode (``len(recommendations) == 1``):
+    - Sets ``single_model_mode`` to ``True`` on the result.
+    - ``unmatched_listings`` is **always** ``[]``; unrelated make/model listings
+      are not surfaced in a separate bucket (callers rely on retrieval filters
+      to scope inventory).
+    """
     prepared = prepare_listings_for_ranking(listings)
     invalid_listings = prepared["invalid_listings"]
 

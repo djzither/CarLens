@@ -695,6 +695,38 @@ def test_canonical_listing_preserved_in_ranked_output():
     assert listing == expected
 
 
+def test_ranking_single_recommendation_suppresses_unmatched():
+    buyer = _buyer("student")
+    corolla_rec = _corolla_recommendation()
+    unrelated = {
+        "make": "BMW",
+        "model": "3 Series",
+        "year": 2016,
+        "mileage": 60000,
+        "price": 15000,
+        "clean_title": True,
+    }
+    corolla_listing = {
+        "make": "Toyota",
+        "model": "Corolla",
+        "year": 2016,
+        "mileage": 85000,
+        "price": 10500,
+        "clean_title": True,
+    }
+    ranked = rank_listings_for_recommendations(
+        [("corolla", corolla_listing), ("bmw", unrelated)],
+        [corolla_rec],
+        buyer,
+    )
+
+    assert ranked.get("single_model_mode") is True
+    assert ranked["unmatched_listings"] == []
+    assert len(ranked["groups"]) == 1
+    assert len(ranked["groups"][0]["listings"]) == 1
+    assert ranked["groups"][0]["listings"][0]["listing_name"] == "corolla"
+
+
 def test_title_only_listing_low_confidence_through_ranker():
     """Ranker must pass original raw listing into confidence assessment."""
     buyer_profile_id, _ = _load_sample_listings()
