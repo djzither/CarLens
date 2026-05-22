@@ -8,6 +8,7 @@ LISTING_OPTIONAL = frozenset(
         "price",
         "mileage",
         "clean_title",
+        "title_status",
         "location",
         "trim",
         "drive_type",
@@ -87,6 +88,8 @@ def validate_listing(listing: Any) -> dict[str, Any]:
         validated["mileage"] = _optional_int(data["mileage"], "listing.mileage")
     if "clean_title" in data:
         validated["clean_title"] = _optional_bool(data["clean_title"], "listing.clean_title")
+    if "title_status" in data:
+        validated["title_status"] = _require_str(data["title_status"], "listing.title_status")
     if "location" in data:
         validated["location"] = _require_str(data["location"], "listing.location")
     if "trim" in data:

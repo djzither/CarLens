@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 from src.listings.listing_normalizer import parse_mileage, parse_price
-from src.listings.provider_clean_title import apply_explicit_clean_title
+from src.listings.auto_dev_title import apply_auto_dev_title_fields
 
 logger = logging.getLogger(__name__)
 
@@ -303,27 +303,6 @@ def _resolve_year(
     return None, warnings
 
 
-def _apply_clean_title(
-    raw: dict[str, Any],
-    *,
-    retail: dict[str, Any],
-    warnings: list[str],
-) -> None:
-    explicit = retail.get("cleanTitle")
-    if explicit is None:
-        explicit = retail.get("clean_title")
-
-    if explicit is not None:
-        apply_explicit_clean_title(raw, explicit)
-        logger.debug("clean_title inferred from provider field: %s", explicit)
-        return
-
-    if "clean_title" in raw:
-        return
-
-    logger.debug("clean_title defaulted to unknown (not provided by Auto.dev)")
-
-
 def _optional_distance_miles(value: Any) -> int | None:
     if value is None or isinstance(value, bool):
         return None
@@ -421,7 +400,19 @@ def adapt_auto_dev_listing(provider_listing: dict[str, Any]) -> dict[str, Any]:
     warnings.extend(location_warnings)
     _set_if_present(raw, "location", location)
 
-    _apply_clean_title(raw, retail=retail, warnings=warnings)
+    title_diagnostics = apply_auto_dev_title_fields(
+        raw,
+        provider_listing=provider_listing,
+    )
+    if title_diagnostics["title_certainty"] == "unknown":
+        logger.debug(
+            "title_status unknown (Auto.dev did not provide explicit clean/dirty title fields)"
+        )
+    else:
+        logger.debug(
+            "title_status mapped from provider fields: %s",
+            title_diagnostics["normalized_title_status"],
+        )
 
     if warnings:
         raw[ADAPTER_WARNINGS_KEY] = warnings

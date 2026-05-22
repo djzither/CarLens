@@ -14,6 +14,9 @@ TitleCertainty = Literal["clean", "dirty", "unknown"]
 
 CLEAN_TITLE_BADGE = "Clean title verified"
 TITLE_UNAVAILABLE_WARNING = "Title history unavailable"
+AUTO_DEV_TITLE_UNAVAILABLE_WARNING = (
+    "Title status not provided by Auto.dev — verify before purchase"
+)
 
 # Provider-reported fields used for data completeness (not fit scoring).
 TRACKED_DATA_FIELDS = frozenset({"make", "model", "year", "price", "mileage"})
@@ -46,9 +49,29 @@ def _resolve_title_certainty(listing: dict[str, Any]) -> TitleCertainty:
         return "clean"
     if clean_title is False:
         return "dirty"
+    title_status = listing.get("title_status")
+    if isinstance(title_status, str):
+        normalized_status = title_status.strip().casefold()
+        if normalized_status == "clean":
+            return "clean"
+        if normalized_status in {"dirty", "salvage", "rebuilt", "branded"}:
+            return "dirty"
+        if normalized_status == "unknown":
+            return "unknown"
     if provider_clean_title_is_unknown(listing) or clean_title is None:
         return "unknown"
     return "unknown"
+
+
+def title_unavailable_warning(
+    listing: dict[str, Any],
+    *,
+    provider_name: str = "",
+) -> str:
+    source = str(listing.get("source") or provider_name or "").casefold()
+    if source == "auto.dev":
+        return AUTO_DEV_TITLE_UNAVAILABLE_WARNING
+    return TITLE_UNAVAILABLE_WARNING
 
 
 def _resolve_fit_quality(fit: dict[str, Any] | None) -> FitQuality:
@@ -100,7 +123,12 @@ def _resolve_data_quality_level(
     return "high"
 
 
-def _title_badges_and_warnings(title_certainty: TitleCertainty) -> tuple[list[str], list[str]]:
+def _title_badges_and_warnings(
+    title_certainty: TitleCertainty,
+    *,
+    listing: dict[str, Any],
+    provider_name: str,
+) -> tuple[list[str], list[str]]:
     badges: list[str] = []
     warnings: list[str] = []
     if title_certainty == "clean":
@@ -108,7 +136,7 @@ def _title_badges_and_warnings(title_certainty: TitleCertainty) -> tuple[list[st
     elif title_certainty == "dirty":
         warnings.append(DIRTY_TITLE_WARNING)
     elif title_certainty == "unknown":
-        warnings.append(TITLE_UNAVAILABLE_WARNING)
+        warnings.append(title_unavailable_warning(listing, provider_name=provider_name))
     return badges, warnings
 
 
@@ -146,7 +174,11 @@ def build_listing_quality_summary(
         provider_warning_count=len(provider_warnings),
     )
 
-    badges, warnings = _title_badges_and_warnings(title_certainty)
+    badges, warnings = _title_badges_and_warnings(
+        title_certainty,
+        listing=listing,
+        provider_name=provider_name,
+    )
 
     return {
         "source": provider_name,

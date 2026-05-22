@@ -14,6 +14,10 @@ from src.listings.auto_dev_client import (
     resolve_fixture_payload,
 )
 from src.listings.auto_dev_adapter import adapt_auto_dev_listing, pop_adapter_warnings
+from src.listings.auto_dev_title import (
+    format_title_diagnostics_provider_note,
+    pop_title_diagnostics,
+)
 from src.listings.listing_source_adapter import AUTO_DEV_SOURCE
 from src.listings.providers.raw_listing_provider import RawListingProvider, raw_listing_matches_id
 from src.listings.providers.search_support import resolve_entry_id, search_raw_listings
@@ -35,9 +39,14 @@ def _expand_adapter_warnings(raw_listings: list[dict[str, Any]]) -> tuple[list[d
     for index, raw in enumerate(raw_listings):
         listing = dict(raw)
         adapter_messages = pop_adapter_warnings(listing)
+        entry_id = resolve_entry_id(listing, fallback_index=index)
         if adapter_messages:
-            entry_id = resolve_entry_id(listing, fallback_index=index)
             warnings.extend(f"{entry_id}: {message}" for message in adapter_messages)
+        title_diagnostics = pop_title_diagnostics(listing)
+        if title_diagnostics:
+            warnings.append(
+                format_title_diagnostics_provider_note(entry_id, title_diagnostics)
+            )
         cleaned.append(listing)
     return cleaned, warnings
 

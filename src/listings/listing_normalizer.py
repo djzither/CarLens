@@ -433,9 +433,14 @@ def normalize_listing(listing: dict[str, Any]) -> dict[str, Any]:
         if trim:
             normalized["trim"] = trim
 
+    title_status = raw.get("title_status")
+    if title_status is not None and str(title_status).strip():
+        normalized["title_status"] = str(title_status).strip().casefold()
+
+    source = str(raw.get("source", "")).strip().casefold()
     if "clean_title" in raw and raw["clean_title"] is not None:
         normalized["clean_title"] = _coerce_bool(raw["clean_title"])
-    else:
+    elif source != "auto.dev":
         inferred_title = detect_clean_title(title, description_text)
         if inferred_title is not None:
             normalized["clean_title"] = inferred_title

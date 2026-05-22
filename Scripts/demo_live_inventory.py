@@ -17,6 +17,7 @@ from app.listing_display import (
     format_mileage,
     format_positive_reasons_for_display,
     format_price,
+    format_title_certainty_display,
 )
 from src.listings.auto_dev_client import AUTODEV_API_KEY_ENV, AutoDevClient
 from src.listings.listing_confidence import assess_listing_confidence
@@ -160,12 +161,8 @@ def _skipped_count(provider_warnings: list[str]) -> int:
     return sum(1 for message in provider_warnings if "skipped" in message.casefold())
 
 
-def _title_certainty_label(title_certainty: str) -> str:
-    return {
-        "clean": "Clean",
-        "dirty": "Dirty / branded",
-        "unknown": "Unknown",
-    }.get(title_certainty, title_certainty)
+def _title_certainty_label(title_certainty: str, *, source: str | None = None) -> str:
+    return format_title_certainty_display(title_certainty, source=source)
 
 
 def _fit_quality_label(fit: dict[str, Any], quality: dict[str, Any]) -> str:
@@ -246,7 +243,7 @@ def _format_listing_result(
         f"  Mileage:  {format_mileage(listing.get('mileage'))}",
         f"  Fit:      {_fit_quality_label(fit, quality)} ({fit.get('fit_score', 0.0):.0%})",
         f"  Data:     {str(quality.get('data_quality_level', '—')).title()}",
-        f"  Title:    {_title_certainty_label(str(quality.get('title_certainty', 'unknown')))}",
+        f"  Title:    {_title_certainty_label(str(quality.get('title_certainty', 'unknown')), source=str(listing.get('source', '')))}",
         f"  Trust:    {confidence.get('confidence_level', '—')}",
         f"  Provider: {record['provider_name']}",
         "  Why it fits:",

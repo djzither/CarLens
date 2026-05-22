@@ -68,6 +68,9 @@ TITLE_DIRTY_HEADLINE = "🚨 Branded/dirty title reported"
 TITLE_DIRTY_DETAIL = "May significantly affect resale and financing"
 TITLE_UNKNOWN_HEADLINE = "⚠️ Title history unavailable"
 TITLE_UNKNOWN_DETAIL = "Ask seller for title documentation"
+AUTO_DEV_TITLE_UNKNOWN_DETAIL = (
+    "Title status not provided by Auto.dev — verify before purchase"
+)
 TITLE_CLEAN_HEADLINE = "✅ Clean title verified"
 
 AlertTier = Literal["red", "yellow", "info"]
@@ -660,15 +663,39 @@ def format_trust_with_explanation(confidence: dict[str, Any]) -> str:
     return f"{level} trust ({_resolve_trust_explanation(confidence)})"
 
 
-def format_title_status_block(title_certainty: str) -> str | None:
+def format_title_status_block(
+    title_certainty: str,
+    *,
+    source: str | None = None,
+) -> str | None:
     """Dedicated title-state copy (shown once on the card)."""
     if title_certainty == "clean":
         return f"**{TITLE_CLEAN_HEADLINE}**"
     if title_certainty == "dirty":
         return f"**{TITLE_DIRTY_HEADLINE}**\n\n_{TITLE_DIRTY_DETAIL}_"
     if title_certainty == "unknown":
-        return f"**{TITLE_UNKNOWN_HEADLINE}**\n\n_{TITLE_UNKNOWN_DETAIL}_"
+        detail = TITLE_UNKNOWN_DETAIL
+        if source and str(source).casefold() == "auto.dev":
+            detail = AUTO_DEV_TITLE_UNKNOWN_DETAIL
+        return f"**{TITLE_UNKNOWN_HEADLINE}**\n\n_{detail}_"
     return None
+
+
+def format_title_certainty_display(
+    title_certainty: str,
+    *,
+    source: str | None = None,
+) -> str:
+    """Short title line for CLI summaries."""
+    if title_certainty == "clean":
+        return "Clean"
+    if title_certainty == "dirty":
+        return "Dirty / branded"
+    if title_certainty == "unknown" and source and str(source).casefold() == "auto.dev":
+        return AUTO_DEV_TITLE_UNKNOWN_DETAIL
+    if title_certainty == "unknown":
+        return "Unknown"
+    return title_certainty
 
 
 def title_certainty_from_listing(listing: dict[str, Any]) -> str:
@@ -741,12 +768,16 @@ def build_listing_card_alerts(
             )
         )
     elif title_certainty == "unknown":
+        source = str(listing.get("source") or quality_summary.get("source") or "")
+        unknown_detail = TITLE_UNKNOWN_DETAIL
+        if source.casefold() == "auto.dev":
+            unknown_detail = AUTO_DEV_TITLE_UNKNOWN_DETAIL
         add(
             ListingCardAlert(
                 "yellow",
                 "title_unknown",
                 TITLE_UNKNOWN_HEADLINE,
-                TITLE_UNKNOWN_DETAIL,
+                unknown_detail,
             )
         )
     elif title_certainty == "clean":

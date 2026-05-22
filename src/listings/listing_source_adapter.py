@@ -20,6 +20,7 @@ RAW_LISTING_CORE_KEYS = frozenset(
         "raw_title",
         "trim",
         "clean_title",
+        "title_status",
         "location",
         "drive_type",
         "description",

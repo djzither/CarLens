@@ -158,7 +158,8 @@ def test_clean_title_inferred_logs_debug(caplog: pytest.LogCaptureFixture) -> No
         raw = adapt_auto_dev_listing(row)
 
     assert raw.get("clean_title") is True
-    assert "clean_title inferred from provider field" in caplog.text
+    assert raw["title_status"] == "clean"
+    assert "title_status mapped from provider fields" in caplog.text
 
 
 def test_clean_title_default_logs_debug(caplog: pytest.LogCaptureFixture) -> None:
@@ -172,7 +173,8 @@ def test_clean_title_default_logs_debug(caplog: pytest.LogCaptureFixture) -> Non
         raw = adapt_auto_dev_listing(row)
 
     assert "clean_title" not in raw
-    assert "clean_title defaulted to unknown" in caplog.text
+    assert raw["title_status"] == "unknown"
+    assert "title_status unknown" in caplog.text
 
 
 def test_adapt_coerces_year_range_and_wholesale_mileage() -> None:

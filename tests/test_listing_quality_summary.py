@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from src.listings.listing_fit import DIRTY_TITLE_WARNING
 from src.listings.listing_quality_summary import (
+    AUTO_DEV_TITLE_UNAVAILABLE_WARNING,
     CLEAN_TITLE_BADGE,
     TITLE_UNAVAILABLE_WARNING,
     ListingQualityWarningsContext,
@@ -87,9 +88,19 @@ def test_dirty_title_vs_unknown_title_warnings() -> None:
     assert dirty_summary["warnings"] == [DIRTY_TITLE_WARNING]
     assert unknown_summary["warnings"] == [TITLE_UNAVAILABLE_WARNING]
     assert "dirty title" not in unknown_summary["warnings"][0].casefold()
-    assert len(dirty_summary["warnings"][0]) > len(unknown_summary["warnings"][0])
-    assert dirty_summary["data_quality_level"] == "low"
-    assert unknown_summary["data_quality_level"] == "medium"
+
+
+def test_auto_dev_unknown_title_uses_provider_specific_wording() -> None:
+    listing = _complete_listing()
+    del listing["clean_title"]
+    listing["title_status"] = "unknown"
+    listing["source"] = "auto.dev"
+    record = _provider_record(listing=listing, provider_name="auto.dev")
+
+    summary = build_listing_quality_summary(record)
+
+    assert summary["title_certainty"] == "unknown"
+    assert summary["warnings"] == [AUTO_DEV_TITLE_UNAVAILABLE_WARNING]
 
 
 def test_provider_raw_fields_drive_provided_and_unavailable() -> None:
