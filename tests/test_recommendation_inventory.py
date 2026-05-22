@@ -123,6 +123,8 @@ def test_pre_retrieval_diagnostics_student_queries() -> None:
     assert "Listings returned per query:" in report
     assert "(pending)" in report
     assert "Fallback triggered: no" in report
+    assert "early_stopped: no" in report
+    assert "models_skipped_due_to_enough_results: 0" in report
     assert "Unmatched model count: 0" in report
 
 
@@ -361,7 +363,89 @@ def test_early_stop_skips_remaining_model_queries() -> None:
     )
 
     assert result["diagnostics"].early_stop_triggered is True
+    assert result["diagnostics"].models_skipped_due_to_enough_results == 2
     assert len(provider.calls) == 1
+    report = format_diagnostics_report(result["diagnostics"])
+    assert "early_stopped: yes" in report
+    assert "models_skipped_due_to_enough_results: 2" in report
+
+
+def test_early_stop_reports_skipped_models_when_top_models_is_four() -> None:
+    batch = [
+        _provider_record(
+            entry_id=f"fill-{index}",
+            make="Toyota",
+            model="Corolla",
+        )
+        for index in range(12)
+    ]
+
+    class _HighVolumeProvider(ListingProvider):
+        name = "high-volume"
+
+        def __init__(self) -> None:
+            self.calls: list[SearchFilters] = []
+
+        def search(self, filters: SearchFilters) -> SearchResult:
+            self.calls.append(filters)
+            if filters.make and filters.model:
+                return SearchResult(listings=list(batch), provider_name=self.name)
+            return SearchResult(listings=[], provider_name=self.name)
+
+        def get_by_id(self, listing_id: str) -> dict | None:
+            return None
+
+    provider = _HighVolumeProvider()
+    service = ListingSearchService([provider])
+    result = retrieve_inventory_for_buyer(
+        "student",
+        service,
+        buyer=_student_buyer(),
+        top_model_count=4,
+        fallback_min_listings=1,
+    )
+    diagnostics = result["diagnostics"]
+
+    assert diagnostics.early_stop_triggered is True
+    assert len(provider.calls) == 2
+    assert len(diagnostics.recommended_models) == 4
+    assert len(diagnostics.provider_searches) == 2
+    assert diagnostics.models_skipped_due_to_enough_results == 2
+    report = format_diagnostics_report(diagnostics)
+    assert "Planned model queries: 4" in report
+    assert "Provider queries executed: 2" in report
+    assert "early_stopped: yes" in report
+    assert "models_skipped_due_to_enough_results: 2" in report
+
+
+def test_enough_inventory_skips_expand_models_without_early_stop() -> None:
+    corolla = _provider_record(entry_id="c1", make="Toyota", model="Corolla")
+    civic = _provider_record(entry_id="c2", make="Honda", model="Civic")
+    camry = _provider_record(entry_id="c3", make="Toyota", model="Camry")
+    sparse = _RecordingProvider(
+        {
+            ("Toyota", "Corolla"): [corolla],
+            ("Honda", "Civic"): [civic],
+            ("Toyota", "Camry"): [camry],
+            ("Mazda", "Mazda3"): [
+                _provider_record(entry_id="c4", make="Mazda", model="Mazda3")
+            ],
+        }
+    )
+    service = ListingSearchService([sparse])
+    result = retrieve_inventory_for_buyer(
+        "student",
+        service,
+        buyer=_student_buyer(),
+        top_model_count=1,
+        fallback_min_listings=3,
+    )
+
+    diagnostics = result["diagnostics"]
+    assert diagnostics.early_stop_triggered is False
+    assert diagnostics.expanded_fallback_triggered is True
+    assert len(diagnostics.provider_searches) == 3
+    assert diagnostics.models_skipped_due_to_enough_results == 2
 
 
 def _budget_fallback_mix() -> list[dict[str, Any]]:

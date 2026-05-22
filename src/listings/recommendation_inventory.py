@@ -88,6 +88,7 @@ class InventorySearchDiagnostics:
     weak_fit_count: int = 0
     listing_count: int = 0
     early_stop_triggered: bool = False
+    models_skipped_due_to_enough_results: int = 0
     top_model_count_capped: bool = False
     fallback_raw_count: int | None = None
     fallback_filtered_count: int | None = None
@@ -110,6 +111,9 @@ class InventorySearchDiagnostics:
             "weak_fit_count": self.weak_fit_count,
             "listing_count": self.listing_count,
             "early_stop_triggered": self.early_stop_triggered,
+            "models_skipped_due_to_enough_results": (
+                self.models_skipped_due_to_enough_results
+            ),
             "top_model_count_capped": self.top_model_count_capped,
             "warnings": list(self.warnings),
             "metrics": self.metrics.as_dict(),
@@ -188,6 +192,10 @@ def format_pre_retrieval_diagnostics(
     lines.extend(format_listings_per_query_lines([], pending=True))
     lines.extend(
         [
+            f"Planned model queries: {len(format_recommended_models(recommendations, top_model_count=top_model_count))}",
+            "Provider queries executed: (pending)",
+            "early_stopped: no",
+            "models_skipped_due_to_enough_results: 0",
             "Fallback triggered: no",
             "Unmatched model count: 0",
         ]
@@ -206,7 +214,23 @@ def format_post_retrieval_diagnostics(
         f"Fallback triggered: {'yes' if diagnostics.fallback_triggered else 'no'}"
     )
     lines.append(f"Unmatched model count: {unmatched_model_count}")
+    lines.extend(format_retrieval_plan_lines(diagnostics))
     return "\n".join(lines)
+
+
+def format_retrieval_plan_lines(diagnostics: InventorySearchDiagnostics) -> list[str]:
+    """Planned vs executed model queries and early-stop summary."""
+    planned = len(diagnostics.recommended_models)
+    executed = len(diagnostics.provider_searches)
+    return [
+        f"Planned model queries: {planned}",
+        f"Provider queries executed: {executed}",
+        f"early_stopped: {'yes' if diagnostics.early_stop_triggered else 'no'}",
+        (
+            "models_skipped_due_to_enough_results: "
+            f"{diagnostics.models_skipped_due_to_enough_results}"
+        ),
+    ]
 
 
 def format_diagnostics_report(diagnostics: InventorySearchDiagnostics) -> str:
@@ -220,7 +244,7 @@ def format_diagnostics_report(diagnostics: InventorySearchDiagnostics) -> str:
 
     lines = [
         f"Recommended models: {diagnostics.recommended_models}",
-        f"Provider queries: {len(diagnostics.provider_searches)}",
+        *format_retrieval_plan_lines(diagnostics),
         *format_listings_per_query_lines(diagnostics.listings_per_query),
         f"Fallback triggered: {'yes' if diagnostics.fallback_triggered else 'no'}",
     ]
@@ -590,10 +614,14 @@ def retrieve_inventory_for_buyer(
 
     per_query_results: list[SearchResult] = []
     collected_count = 0
+    models_queried = 0
 
     for recommendation in initial_recommendations:
         if collected_count >= EARLY_STOP_LISTING_COUNT:
             diagnostics.early_stop_triggered = True
+            diagnostics.models_skipped_due_to_enough_results += (
+                len(initial_recommendations) - models_queried
+            )
             break
         _run_model_query(
             session,
@@ -603,6 +631,7 @@ def retrieve_inventory_for_buyer(
             retrieval_source=RETRIEVAL_SOURCE_RECOMMENDATION,
             per_query_results=per_query_results,
         )
+        models_queried += 1
         collected_count = sum(len(result.listings) for result in per_query_results)
 
     merged, aggregator_dupes = merge_search_results(per_query_results)
@@ -618,11 +647,18 @@ def retrieve_inventory_for_buyer(
         expand_candidates = recommendations[expand_start:expand_end]
         if expand_candidates:
             diagnostics.expanded_fallback_triggered = True
+            expand_models_queried = 0
             for recommendation in expand_candidates:
                 if collected_count >= fallback_min_listings:
+                    diagnostics.models_skipped_due_to_enough_results += (
+                        len(expand_candidates) - expand_models_queried
+                    )
                     break
                 if collected_count >= EARLY_STOP_LISTING_COUNT:
                     diagnostics.early_stop_triggered = True
+                    diagnostics.models_skipped_due_to_enough_results += (
+                        len(expand_candidates) - expand_models_queried
+                    )
                     break
                 _run_model_query(
                     session,
@@ -632,6 +668,7 @@ def retrieve_inventory_for_buyer(
                     retrieval_source=RETRIEVAL_SOURCE_EXPANDED,
                     per_query_results=per_query_results,
                 )
+                expand_models_queried += 1
                 merged, aggregator_dupes = merge_search_results(per_query_results)
                 diagnostics.aggregator_duplicates_removed = aggregator_dupes
                 collected_count = len(merged.listings)
