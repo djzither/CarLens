@@ -394,10 +394,11 @@ def run_selected_model_inventory(
 
     retrieval = retrieve_inventory_for_selected_model(
         buyer_profile_id,
+        selected["make"],
+        selected["model"],
         search_service,
         buyer=buyer,
-        selected_recommendation=selected,
-        recommendations=recommendations,
+        recommendation=selected,
         fallback_min_listings=fallback_min_listings,
     )
 

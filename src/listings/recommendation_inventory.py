@@ -6,7 +6,10 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.listings.listing_ranker import rank_listings_for_recommendations
+from src.listings.listing_ranker import (
+    rank_listings_for_recommendations,
+    rank_listings_for_single_model,
+)
 from src.listings.providers.schema import validate_provider_listing_record
 from src.listings.providers.search_service import AGGREGATED_PROVIDER_NAME
 from src.listings.providers.types import SearchFilters, SearchResult
@@ -21,7 +24,12 @@ EARLY_STOP_LISTING_COUNT = 20
 
 RETRIEVAL_SOURCE_RECOMMENDATION = "recommendation"
 RETRIEVAL_SOURCE_EXPANDED = "expanded"
+RETRIEVAL_SOURCE_CONSTRAINED_FALLBACK = "constrained_fallback"
 RETRIEVAL_SOURCE_BUDGET_FALLBACK = "budget_fallback"
+
+CONSTRAINED_FALLBACK_YEAR_PADDING = 2
+CONSTRAINED_FALLBACK_MILEAGE_FACTOR = 1.10
+CONSTRAINED_FALLBACK_PRICE_FACTOR = 1.05
 
 
 @dataclass
@@ -79,6 +87,14 @@ class InventorySearchDiagnostics:
 
     recommended_models: list[dict[str, str]] = field(default_factory=list)
     selected_model: str | None = None
+    selected_make: str | None = None
+    selected_model_name: str | None = None
+    constrained_fallback_triggered: bool = False
+    fallback_broadening_applied: dict[str, Any] | None = None
+    initial_result_count: int = 0
+    fallback_result_count: int = 0
+    final_result_count: int = 0
+    provider_query_params: list[dict[str, Any]] = field(default_factory=list)
     provider_searches: list[dict[str, Any]] = field(default_factory=list)
     listings_per_query: list[dict[str, Any]] = field(default_factory=list)
     fallback_triggered: bool = False
@@ -97,11 +113,20 @@ class InventorySearchDiagnostics:
     metrics: RetrievalMetrics = field(default_factory=RetrievalMetrics)
 
     def as_dict(self) -> dict[str, Any]:
+        provider_params = self.provider_query_params or self.provider_searches
         return {
             "recommended_models": self.recommended_models,
             "selected_model": self.selected_model,
+            "selected_make": self.selected_make,
+            "selected_model_name": self.selected_model_name,
+            "constrained_fallback_triggered": self.constrained_fallback_triggered,
+            "fallback_broadening_applied": self.fallback_broadening_applied,
+            "initial_result_count": self.initial_result_count,
+            "fallback_result_count": self.fallback_result_count,
+            "final_result_count": self.final_result_count,
+            "provider_query_params": provider_params,
             "provider_searches": self.provider_searches,
-            "provider_queries": self.provider_searches,
+            "provider_queries": provider_params,
             "listings_per_query": self.listings_per_query,
             "fallback_triggered": self.fallback_triggered,
             "fallback_raw_count": self.fallback_raw_count,
@@ -366,6 +391,107 @@ def filters_for_recommendation_widened_year(
         model=recommendation["model"],
         max_price=int(max_price) if max_price is not None else None,
         max_mileage=int(max_mileage) if max_mileage is not None else None,
+    )
+
+
+def find_recommendation_by_make_model(
+    recommendations: list[dict[str, Any]],
+    make: str,
+    model: str,
+) -> dict[str, Any]:
+    """Return the recommendation entry matching make/model (case-insensitive)."""
+    needle = (make.strip().casefold(), model.strip().casefold())
+    for item in recommendations:
+        key = (str(item["make"]).strip().casefold(), str(item["model"]).strip().casefold())
+        if key == needle:
+            return item
+    available = format_available_model_labels(recommendations)
+    raise ValueError(
+        f"make/model {make!r} {model!r} not found in recommendations. "
+        f"Valid options: {available}"
+    )
+
+
+def recommendation_stub_for_make_model(make: str, model: str) -> dict[str, Any]:
+    """Minimal recommendation payload when only make/model are known."""
+    return {"make": make, "model": model, "selected_year_range": {}}
+
+
+def filters_for_constrained_fallback(
+    primary_filters: SearchFilters,
+) -> SearchFilters:
+    """Broaden year, mileage, and price while preserving make/model constraints."""
+    min_year = primary_filters.min_year
+    max_year = primary_filters.max_year
+    if min_year is not None:
+        min_year = max(0, int(min_year) - CONSTRAINED_FALLBACK_YEAR_PADDING)
+    if max_year is not None:
+        max_year = int(max_year) + CONSTRAINED_FALLBACK_YEAR_PADDING
+
+    max_mileage = primary_filters.max_mileage
+    if max_mileage is not None:
+        max_mileage = int(max_mileage * CONSTRAINED_FALLBACK_MILEAGE_FACTOR)
+
+    max_price = primary_filters.max_price
+    if max_price is not None:
+        max_price = int(max_price * CONSTRAINED_FALLBACK_PRICE_FACTOR)
+
+    return SearchFilters(
+        make=primary_filters.make,
+        model=primary_filters.model,
+        min_year=min_year,
+        max_year=max_year,
+        max_price=max_price,
+        max_mileage=max_mileage,
+        clean_title_only=primary_filters.clean_title_only,
+    )
+
+
+def describe_fallback_broadening(
+    primary_filters: SearchFilters,
+    fallback_filters: SearchFilters,
+) -> dict[str, Any]:
+    """Summarize constrained fallback parameter changes for diagnostics."""
+    return {
+        "year": {
+            "min_year": {
+                "from": primary_filters.min_year,
+                "to": fallback_filters.min_year,
+            },
+            "max_year": {
+                "from": primary_filters.max_year,
+                "to": fallback_filters.max_year,
+            },
+        },
+        "max_mileage": {
+            "from": primary_filters.max_mileage,
+            "to": fallback_filters.max_mileage,
+        },
+        "max_price": {
+            "from": primary_filters.max_price,
+            "to": fallback_filters.max_price,
+        },
+    }
+
+
+def filter_search_result_to_make_model(
+    result: SearchResult,
+    make: str,
+    model: str,
+) -> SearchResult:
+    """Drop provider listings that do not match the selected make/model."""
+    target = (make.strip().casefold(), model.strip().casefold())
+    filtered = [
+        record
+        for record in result.listings
+        if (key := _listing_make_model_key(record)) is not None and key == target
+    ]
+    return SearchResult(
+        listings=filtered,
+        provider_name=result.provider_name,
+        provider_warnings=result.provider_warnings,
+        errors=result.errors,
+        total_available=result.total_available,
     )
 
 
@@ -811,19 +937,27 @@ def retrieve_inventory_for_buyer(
 
 def retrieve_inventory_for_selected_model(
     buyer_profile_id: str,
+    make: str,
+    model: str,
     search_service: Any,
     *,
     buyer: dict[str, Any] | None = None,
-    selected_recommendation: dict[str, Any],
-    recommendations: list[dict[str, Any]] | None = None,
+    fallback_strategy: str = "constrained",
     fallback_min_listings: int = FALLBACK_MIN_LISTINGS,
+    recommendation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
-    Pull inventory for one recommended make/model (no generic budget fallback).
+    Primary single-model guided retrieval: one make/model, constrained fallback only.
 
-    If the primary year-bounded search returns too few listings, retries with the
-    same make/model and buyer budget/mileage but without year constraints.
+    Initial query preserves make/model, budget, mileage, and recommendation year range.
+    When results are insufficient, optionally broadens year, mileage, and price ceiling
+    for the same make/model — never other models or budget-only retrieval.
     """
+    if fallback_strategy != "constrained":
+        raise ValueError(
+            f"unsupported fallback_strategy {fallback_strategy!r}; use 'constrained'"
+        )
+
     if buyer is None:
         buyer_data = load_buyer_profiles()
         buyer = _find_buyer(buyer_data["profiles"], buyer_profile_id)
@@ -834,62 +968,77 @@ def retrieve_inventory_for_selected_model(
         raise ValueError(
             f"no vehicle recommendations available for profile {buyer_profile_id!r}"
         )
-    if recommendations is None:
-        recommendations = all_recommendations
+
+    if recommendation is None:
+        try:
+            recommendation = find_recommendation_by_make_model(
+                all_recommendations,
+                make,
+                model,
+            )
+        except ValueError:
+            recommendation = recommendation_stub_for_make_model(make, model)
 
     session = _RetrievalSession(search_service)
     diagnostics = InventorySearchDiagnostics(metrics=session.metrics)
-    diagnostics.selected_model = recommendation_model_label(selected_recommendation)
-    diagnostics.recommended_models = [
-        {
-            "make": selected_recommendation["make"],
-            "model": selected_recommendation["model"],
-        }
-    ]
+    diagnostics.selected_make = make
+    diagnostics.selected_model_name = model
+    diagnostics.selected_model = recommendation_model_label(recommendation)
+    diagnostics.recommended_models = [{"make": make, "model": model}]
 
     per_query_results: list[SearchResult] = []
+    primary_filters = filters_for_recommendation(recommendation, buyer)
     _run_model_query(
         session,
         diagnostics,
-        recommendation=selected_recommendation,
+        recommendation=recommendation,
         buyer=buyer,
         retrieval_source=RETRIEVAL_SOURCE_RECOMMENDATION,
         per_query_results=per_query_results,
+        filters=primary_filters,
     )
 
     merged, aggregator_dupes = merge_search_results(per_query_results)
+    merged = filter_search_result_to_make_model(merged, make, model)
     diagnostics.aggregator_duplicates_removed = aggregator_dupes
-    collected_count = len(merged.listings)
+    diagnostics.initial_result_count = len(merged.listings)
+    collected_count = diagnostics.initial_result_count
 
     if collected_count < fallback_min_listings:
+        diagnostics.constrained_fallback_triggered = True
         diagnostics.expanded_fallback_triggered = True
-        widened_filters = filters_for_recommendation_widened_year(
-            selected_recommendation,
-            buyer,
+        fallback_filters = filters_for_constrained_fallback(primary_filters)
+        diagnostics.fallback_broadening_applied = describe_fallback_broadening(
+            primary_filters,
+            fallback_filters,
         )
         query_summary = {
-            **search_filters_summary(widened_filters),
-            "retrieval_source": RETRIEVAL_SOURCE_EXPANDED,
+            **search_filters_summary(fallback_filters),
+            "retrieval_source": RETRIEVAL_SOURCE_CONSTRAINED_FALLBACK,
         }
         diagnostics.provider_searches.append(query_summary)
-        widened_result = session.search(
-            widened_filters,
-            retrieval_source=RETRIEVAL_SOURCE_EXPANDED,
+        diagnostics.provider_query_params.append(query_summary)
+        fallback_result = session.search(
+            fallback_filters,
+            retrieval_source=RETRIEVAL_SOURCE_CONSTRAINED_FALLBACK,
         )
-        per_query_results.append(widened_result)
+        fallback_result = filter_search_result_to_make_model(fallback_result, make, model)
+        per_query_results.append(fallback_result)
+        diagnostics.fallback_result_count = len(fallback_result.listings)
         diagnostics.listings_per_query.append(
-            {**query_summary, "count": len(widened_result.listings)},
+            {**query_summary, "count": diagnostics.fallback_result_count},
         )
         merged, aggregator_dupes = merge_search_results(per_query_results)
+        merged = filter_search_result_to_make_model(merged, make, model)
         diagnostics.aggregator_duplicates_removed = aggregator_dupes
         collected_count = len(merged.listings)
 
+    diagnostics.provider_query_params = list(diagnostics.provider_searches)
+    diagnostics.final_result_count = collected_count
+    diagnostics.listing_count = collected_count
+
     scenarios = provider_records_to_scenarios(merged.listings)
-    ranked = rank_listings_for_recommendations(
-        scenarios,
-        recommendations,
-        buyer,
-    )
+    ranked = rank_listings_for_single_model(scenarios, recommendation, buyer)
     pipeline = ranked.get("pipeline") or {}
     diagnostics.duplicates_removed = max(
         0,
@@ -897,14 +1046,15 @@ def retrieve_inventory_for_selected_model(
         - int(pipeline.get("deduped_count", len(scenarios))),
     )
     diagnostics.weak_fit_count = count_weak_fits(ranked)
-    diagnostics.listing_count = len(merged.listings)
     diagnostics.metrics.final_ranked = count_ranked_listings(ranked)
 
     return {
         "buyer_profile_id": buyer_profile_id,
         "buyer": buyer,
         "recommendation_result": recommendation_result,
-        "selected_recommendation": selected_recommendation,
+        "selected_make": make,
+        "selected_model": model,
+        "selected_recommendation": recommendation,
         "search_result": merged,
         "ranked": ranked,
         "diagnostics": diagnostics,

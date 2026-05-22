@@ -274,6 +274,51 @@ def rank_listings_for_recommendations(
     }
 
 
+def rank_listings_for_single_model(
+    listings: list[tuple[str, dict[str, Any]]],
+    recommendation: dict[str, Any],
+    buyer: dict[str, Any],
+) -> dict[str, Any]:
+    """Rank inventory for one selected make/model; no unmatched bucket."""
+    prepared = prepare_listings_for_ranking(listings)
+    invalid_listings = prepared["invalid_listings"]
+    target_key = _model_key(recommendation["make"], recommendation["model"])
+
+    scored: list[tuple[int, str, dict[str, Any], dict[str, Any]]] = []
+    for index, listing_name, raw_listing, listing in prepared["prepared_entries"]:
+        if _listing_model_key(listing) != target_key:
+            continue
+        fit = score_listing_fit(
+            raw_listing,
+            recommendation,
+            buyer,
+            normalized_listing=listing,
+        )
+        scored.append((index, listing_name, listing, fit))
+
+    group: dict[str, Any] = {
+        "recommendation_rank": 1,
+        "make": recommendation["make"],
+        "model": recommendation["model"],
+        "recommendation": recommendation,
+        "recommendation_score": recommendation.get("normalized_score"),
+        "listings": _sort_scored_listings(scored),
+    }
+    if not group["listings"]:
+        group["coverage_message"] = COVERAGE_MESSAGE_NO_LISTINGS
+
+    return {
+        "groups": [group],
+        "unmatched_listings": [],
+        "invalid_listings": invalid_listings,
+        "pipeline": {
+            "raw_count": prepared["raw_count"],
+            "normalized_count": prepared["normalized_count"],
+            "deduped_count": prepared["deduped_count"],
+        },
+    }
+
+
 def rank_listings_by_recommendation(
     listings: list[tuple[str, dict[str, Any]]],
     recommendations: list[dict[str, Any]],
